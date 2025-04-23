@@ -10,7 +10,7 @@ load_dotenv()
 token = os.getenv("git_token")
 CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
 
-GITHUB_API_URL_BASE = "https://api.github.com/repos/O-Braixen/Repositorio_Musicas_BH/contents"
+GITHUB_API_URL_BASE = os.getenv("git_repositorio")
 PASTAS = ["musicas", "anuncios"]
 HEADERS = {"Authorization": f"token {token}"}  # Substitua pelo seu token pessoal
 

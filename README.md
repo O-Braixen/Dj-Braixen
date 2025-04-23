@@ -20,4 +20,5 @@ Esse codigo é somente referencia para um reproduzir de musica a partir de duas 
 - Token do seu bot em DISCORD_TOKEN_RADIO
 - Token da square em square_token
 - Token do github para acesso a repositorio particular
+- Link do seu repositorio de musicas e anúncios, lembre-se que precisa obrigatoriamente ambas as pastas, mesmo que não tenha anúncios
 - ID do canal onde o bot irá se conectar

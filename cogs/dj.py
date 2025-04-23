@@ -10,8 +10,8 @@ load_dotenv()
 token = os.getenv("git_token")
 CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
 
-GITHUB_API_URL_BASE = "https://api.github.com/repos/O-Braixen/PokeMusicBH/contents"
-PASTAS = ["Musicas-DJBraixen", "anuncios"]
+GITHUB_API_URL_BASE = "https://api.github.com/repos/O-Braixen/Repositorio_Musicas_BH/contents"
+PASTAS = ["musicas", "anuncios"]
 HEADERS = {"Authorization": f"token {token}"}  # Substitua pelo seu token pessoal
 
 MAX_TENTATIVAS = 10
@@ -23,8 +23,8 @@ class MusicBot(commands.Cog):
         self.client = client
         self.voice_channel_id = CHANNEL_ID  # ID do canal de voz.
         self.synced = False
-
-        self.music_folder = os.path.join("musicas_repo", "Musicas-DJBraixen")  # Nova pasta de músicas
+        self.played_songs = set()
+        self.music_folder = os.path.join("musicas_repo", "musicas")  # Nova pasta de músicas
         self.announcement_folder = os.path.join("musicas_repo", "anuncios")  # Pasta de anúncios
         self.current_song = None   #MUSICA ATUAL TOCANDO
         self.current_announcement = False   #ANUNCIO ATUAL
@@ -36,15 +36,18 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print("🎵 - Modúlo DJ carregado.")
-        self.verificar_arquivos.start()
-        await asyncio.sleep(20)
+        await asyncio.sleep(10)
+        if not self.memory_check.is_running():
+            self.memory_check.start()  # Inicia a verificação de memoria.
+        if not self.verificar_arquivos.is_running():
+            await self.verificar_arquivos.start()
         await self.reproduzir()
         
 
 
 
       # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
-    @tasks.loop(hours=4)
+    @tasks.loop(minutes=20)
     async def verificar_arquivos(self):
         await self.baixar_arquivos()
 
@@ -79,7 +82,7 @@ class MusicBot(commands.Cog):
                                     with open(caminho_arquivo, "wb") as f:
                                         f.write(await download_response.read())
                                     print(f"✅ - Baixado: {nome_arquivo}")
-                                    #await asyncio.sleep(0.5)
+                                    await asyncio.sleep(2)
                                 else:
                                     print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
                                     print("🔁 - Reiniciando tentativa de download...")
@@ -105,24 +108,36 @@ class MusicBot(commands.Cog):
                     self.check_music.start()  # Verificação contínua.
                 if not self.hourly_announcements.is_running():
                     self.hourly_announcements.start()  # Inicia sistema de anúncios
-                if not self.memory_check.is_running():
-                    self.memory_check.start()  # Inicia a verificação de memoria.
+                
             except Exception as e:
                 print(f"❌ - ({self.client.user}) Erro ao conectar ao canal de voz: {e}")
         else:
             print(f"❌ - ({self.client.user}) Canal de voz não encontrado.")
 
+
+
+
         # PROCURA UMA MUSICA ALEATORIA E SELECIONA
     def get_random_song(self):
         try:
             files = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
-            if not files:
-                return None
-            return random.choice(files)
+            remaining_songs = list(set(files) - self.played_songs)
+
+            if not remaining_songs:
+                self.played_songs.clear()
+                remaining_songs = files
+
+            song = random.choice(remaining_songs)
+            self.played_songs.add(song)
+            return song
+
         except Exception as e:
             print(f"❌ - Erro ao listar músicas: {e}")
             return None
     
+
+
+
         # PUXA UM ANUNCIO EM UM DETEMINADO HORARIO
     def get_hourly_announcement(self):
         current_hour = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo')).hour
@@ -130,6 +145,9 @@ class MusicBot(commands.Cog):
         filepath = os.path.join(self.announcement_folder, filename)
         return filepath if os.path.exists(filepath) else False
     
+
+
+
 
         # TOCA MUSICA DE FATO
     async def play_music(self, vc):
@@ -224,12 +242,12 @@ class MusicBot(commands.Cog):
 
 
     # Monitorar Memoria no sistema DJ
-    @tasks.loop(minutes=5)
+    @tasks.loop(seconds=15)
     async def memory_check(self):
         res_status = await status(self.client.user.name)
         ram_str = res_status['response']['ram']
         ram_value = float(ram_str.replace("MB", "").strip())
-        if ram_value >= 220:
+        if ram_value >= 200:
             print("🤖 - Uso de RAM alto! Reiniciando o app pela Square Cloud...")
             await asyncio.sleep(30)
             await restart(self.client.user.name)

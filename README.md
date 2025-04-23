@@ -1,1 +1,23 @@
-# Dj-Braixen
+# Dj-Braixen - A atendente multi-uso
+
+![bot image](img/dj_braixen_avatar.png)
+
+
+Codigo em Python de um bot de musica que funciona como uma verdadeira radio com uma Dj carismatica que até faz participação vocal.
+
+Esse codigo é somente referencia para um reproduzir de musica a partir de duas pastas, uma chamada **musica** e outra chamada **anuncios**, o codigo foi desenvolvido para ser usado diretamente em alguma comunidade, neste caso é simples, o codigo ta programado para sincronizar um repositorio, e a partir disso começa a tocar as musicas, onde que a cada hora verifica se existe algum anuncio para aquele deteminado horario e o toca, bem simples e automatizado.
+
+**Lista dos comandos**
+
+- /dj ping
+- /dj status
+- Menção do bot
+
+
+**Variaveis exigidas**
+
+- SUA ID em DONO_ID
+- Token do seu bot em DISCORD_TOKEN_RADIO
+- Token da square em square_token
+- Token do github para acesso a repositorio particular
+- ID do canal onde o bot irá se conectar

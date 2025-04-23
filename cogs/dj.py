@@ -39,15 +39,13 @@ class MusicBot(commands.Cog):
         await asyncio.sleep(10)
         if not self.memory_check.is_running():
             self.memory_check.start()  # Inicia a verificação de memoria.
-        if not self.verificar_arquivos.is_running():
-            await self.verificar_arquivos.start()
-        await self.reproduzir()
+        await self.verificar_arquivos()
+        
         
 
 
 
       # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
-    @tasks.loop(minutes=20)
     async def verificar_arquivos(self):
         await self.baixar_arquivos()
 
@@ -94,6 +92,7 @@ class MusicBot(commands.Cog):
                         print("🔁 - Reiniciando tentativa de download...")
                         return await self.baixar_arquivos(tentativa + 1)
             print("✅ - Biblioteca de musicas sincronizada com Github")
+            await self.reproduzir()
 
 
 

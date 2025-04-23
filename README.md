@@ -1,4 +1,4 @@
-# Dj-Braixen - A atendente multi-uso
+# Dj-Braixen - Uma Dj personalizada
 
 ![bot image](img/dj_braixen_avatar.png)
 

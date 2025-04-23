@@ -1,0 +1,6 @@
+discord.py
+python-dotenv
+audioop-lts
+requests
+pytz
+pynacl

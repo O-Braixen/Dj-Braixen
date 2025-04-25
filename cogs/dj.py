@@ -207,6 +207,8 @@ class MusicBot(commands.Cog):
                 print(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
             except Exception as e:
                 print(f"❌ - Erro ao reconectar: {e}")
+                await vc.cleanup()
+                await vc.disconnect()
         
         # Verifica se a música parou
         if vc and not vc.is_playing() and not vc.is_paused():
@@ -215,7 +217,9 @@ class MusicBot(commands.Cog):
                 await self.play_music(vc)
             except Exception as e:
                 print(f"❌ - Erro ao reiniciar o stream: {e}")
-                  
+                await vc.cleanup()
+                await vc.disconnect()
+        
 
         # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
     @tasks.loop(minutes=5)

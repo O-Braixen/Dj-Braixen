@@ -1,4 +1,4 @@
-import discord, os, platform, datetime
+import discord, os, platform, datetime , logging
 from os import listdir
 from discord.ext import commands
 from dotenv import load_dotenv
@@ -6,7 +6,15 @@ from dotenv import load_dotenv
 load_dotenv()
 TOKEN_RADIO = os.getenv("DISCORD_TOKEN_RADIO") 
 
+# Reduzir o nível de log do discord
+discord_logger = logging.getLogger('discord')
+discord_logger.setLevel(logging.WARNING)  # Ou ERROR se quiser esconder ainda mais
 
+# Se quiser esconder logs de partes específicas (como voice_state ou player):
+logging.getLogger('discord.voice_state').setLevel(logging.WARNING)
+logging.getLogger('discord.player').setLevel(logging.WARNING)
+#redução de logs
+logging.getLogger('discord').setLevel(logging.CRITICAL)
 
 
 class Client(commands.Bot):
@@ -41,6 +49,11 @@ class Client(commands.Bot):
         print(f"💖 - Estou em {len(self.guilds)} comunidades com um total de {len(self.users)} membros")
         print(f"⏰ - A hora no sistema é {datetime.datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}\n\n")
         
+
+
+
+
+
 
 # Criar instância do bot principal
 djbraixen = Client()

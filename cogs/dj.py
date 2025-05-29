@@ -85,7 +85,7 @@ class MusicBot(commands.Cog):
                                     with open(caminho_arquivo, "wb") as f:
                                         f.write(await download_response.read())
                                     print(f"✅ - Baixado: {nome_arquivo}")
-                                    await asyncio.sleep(1)
+                                    await asyncio.sleep(1.5)
                                 else:
                                     print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
                                     print("🔁 - Reiniciando tentativa de download...")
@@ -164,7 +164,7 @@ class MusicBot(commands.Cog):
     async def play_music(self, vc):
         while vc.is_connected():
             if self.current_announcement:
-                print(f"✅ - Tocando anúncio: {self.current_announcement}")
+                print(f"‼️ - Tocando Anúncio: {self.current_announcement}")
                 path = self.current_announcement
                 self.current_announcement = False
             else:
@@ -175,6 +175,7 @@ class MusicBot(commands.Cog):
                     continue
                 path = os.path.join(self.music_folder, song)
                 self.current_song = song
+                print(f"💿 - Tocando Agora: {self.current_song}")
                 await self.update_status(song, vc)
             
             # Separar para ter acesso ao FFmpegPCMAudio diretamente
@@ -273,10 +274,10 @@ class MusicBot(commands.Cog):
             res_status, host = await status(self.client.user.name)
             if host == "squarecloud":
                 ram_str = res_status['response']['ram']
-                limit_ram = 200
+                limit_ram = 235
             if host == "discloud":
                 ram_str = res_status['apps']['memory'].split('/')[0]
-                limit_ram = 80
+                limit_ram = 90
             
             ram_value = float(ram_str.replace("MB", "").strip())
             if ram_value >= limit_ram:

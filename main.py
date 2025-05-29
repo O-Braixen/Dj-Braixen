@@ -4,7 +4,7 @@ from discord.ext import commands
 from dotenv import load_dotenv
 
 load_dotenv()
-token_radio = os.getenv("DISCORD_TOKEN_RADIO") 
+TOKEN_RADIO = os.getenv("DISCORD_TOKEN_RADIO") 
 
 
 
@@ -44,4 +44,4 @@ class Client(commands.Bot):
 
 # Criar instância do bot principal
 djbraixen = Client()
-djbraixen.run(token_radio)
+djbraixen.run(TOKEN_RADIO)

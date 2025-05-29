@@ -15,6 +15,28 @@ if square_token:
 if discloud_token:
     host = "discloud"
 
+def obter_nome_bot():
+    global host
+    if host == "discloud":
+        caminho = "discloud.config"
+        return ler_arquivo(caminho, host)
+    elif host == "squarecloud":
+        caminho = "squarecloud.app"
+        return ler_arquivo(caminho, host)
+    else:
+        raise ValueError("Host desconhecido.")
+
+def ler_arquivo(caminho , host):
+    with open(caminho, "r", encoding="utf-8") as f:
+        for linha in f:
+            if host == "squarecloud":
+                if linha.startswith("DISPLAY_NAME="):
+                    return linha.strip().split("=", 1)[1]
+            if host == "discloud":
+                if linha.startswith("NAME="):
+                    return linha.strip().split("=", 1)[1]
+    return None
+
 
 async def appname(nome):
     global appid
@@ -70,7 +92,7 @@ async def restart(nome):
     retorno = await appname(nome)
     if host == "squarecloud":
         res_status =  requests.post(f"https://api.squarecloud.app/v2/apps/{retorno}/restart",headers={"Authorization": square_token})
-        return res_status , host
+        return res_status.json() , host
     if host == "discloud":
-        res_status =  requests.post(f"https://api.discloud.app/v2/app/{retorno}/restart",headers={"api-token": discloud_token})
-        return res_status , host
+        res_status =  requests.put(f"https://api.discloud.app/v2/app/{retorno}/restart",headers={"api-token": discloud_token})
+        return res_status.json() , host

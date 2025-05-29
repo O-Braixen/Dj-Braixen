@@ -1,13 +1,13 @@
 import discord,os,requests,json,datetime,pytz,asyncio
 from discord.ext import commands
 from discord import app_commands
-from cogs.essential.host import informação,status,restart
+from cogs.essential.host import informação,status,restart , obter_nome_bot
 from dotenv import load_dotenv
 
 
 #CARREGA E LE O ARQUIVO .env na raiz
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env')) #load .env da raiz
-donoid = int(os.getenv("DONO_ID")) #acessa e define o id do dono
+DONOID = int(os.getenv("DONO_ID")) #acessa e define o id do dono
 
 
 #Função status
@@ -30,7 +30,7 @@ async def botstatus(self,interaction):
           resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
           resposta.add_field(name="🖥️⠂squarecloud", value=f"```{res_information['response']['cluster']}```", inline=True)
           resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['response']['language']}```", inline=True)
-          resposta.add_field(name="🦊⠂Dono", value=f"<@{donoid}>", inline=True)
+          resposta.add_field(name="🦊⠂Dono", value=f"<@{DONOID}>", inline=True)
           resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['response']['ram'])} / {res_information['response']['ram']} MB```", inline=True)
           resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['response']['cpu']}```", inline=True)
           resposta.add_field(name="🕐⠂Uptime", value=f"<t:{round(res_status['response']['uptime']/1000)}:R>", inline=True)
@@ -44,16 +44,17 @@ async def botstatus(self,interaction):
         if host == "discloud":
           resposta = discord.Embed(
                   colour=discord.Color.yellow(),
-                  title=f"🦊┃Informações do {self.client.user.name}"
+                  title=f"🦊┃Informações do {self.client.user.name}",
+                  description=f"🖥️⠂Discloud - {res_information['apps']['name']}"
               )
           resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
-          resposta.add_field(name="🖥️⠂Discloud", value=f"```{res_information['apps']['name']}```", inline=True)
           resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['apps']['lang']}```", inline=True)
-          resposta.add_field(name="🦊⠂Dono", value=f"<@{donoid}>", inline=True)
+          resposta.add_field(name="🦊⠂Dono", value=f"<@{DONOID}>", inline=True)
           resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['apps']['memory'])}```", inline=True)
+          resposta.add_field(name="🗄️⠂Armazenamento", value=f"```{res_status['apps']['ssd']}```", inline=True)
           resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['apps']['cpu']}```", inline=True)
           resposta.add_field(name="🕐⠂Uptime", value=f"{res_status['apps']['last_restart']}", inline=True)
-          resposta.add_field(name="🌐⠂Rede", value=f"```{res_status['apps']['netIO']['down']}```", inline=True)
+          resposta.add_field(name="🌐⠂Rede", value=f"```⬇️ {res_status['apps']['netIO']['down']}/⬆️ {res_status['apps']['netIO']['up']}```", inline=True)
           resposta.add_field(name="🏓⠂Ping", value=f"```{round(self.client.latency * 1000)}ms```", inline=True)
           resposta.add_field(name="🔮⠂Menção", value=f"<@{self.client.user.id}>", inline=True)
           resposta.add_field(name="🕐⠂Hora Sistema", value=f"```{now.strftime('%d/%m/%y - %H:%M')}```", inline=True)
@@ -87,6 +88,15 @@ class owner(commands.Cog):
   @commands.Cog.listener()
   async def on_ready(self):
     print("🦊 - Modúlo Owner carregado.")
+
+    # Editando o Nome do bot para o padrão que está na host
+    novo_nome = obter_nome_bot()
+    if self.client.user.name != novo_nome:
+      try:
+        await self.client.user.edit(username=novo_nome)
+        print(f"🤖 - Nome do bot foi alterado para {novo_nome}")
+      except discord.HTTPException as e:
+        print(f"Erro ao alterar nome do bot: {e}")
 
 
 
@@ -135,6 +145,20 @@ class owner(commands.Cog):
   @bot.command(name="status",description='🤖⠂Exibe informações sobre o status de DJ Braixen.')
   async def botstatusslash(self, interaction: discord.Interaction):
     await botstatus(self,interaction)
+  
+
+
+  #COMANDO RESTART BOT NA HOST
+  @bot.command(name="restart",description='🤖⠂Reinicia a DJ Braixen na Host.')
+  async def botstatusslash(self, interaction: discord.Interaction):
+    if interaction.user.id == DONOID:
+      await interaction.response.defer()
+      await interaction.followup.send(f"Solicitando seu pedido...")
+      retorno, host = await restart(self.client.user.name)
+      await interaction.followup.send(f"Retorno da sua solicitação: {retorno['status']} em {host}")
+
+    await interaction.response.send_message("Este comando é somente para o Dono do bot usar ~kyuu.")
+   
     
 
 

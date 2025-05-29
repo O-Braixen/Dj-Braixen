@@ -17,26 +17,48 @@ async def botstatus(self,interaction):
     now = datetime.datetime.now().astimezone(fuso)
     try:
       try:
-        res_information = await informação(self.client.user.name)
-        res_status = await status(self.client.user.name)
-        resposta = discord.Embed(
-                colour=discord.Color.yellow(),
-                title=f"🦊┃Informações do {self.client.user.name}",
-                description=f"{res_information['response']['desc']}"
-            )
-        resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
-        resposta.add_field(name="🖥️⠂squarecloud", value=f"```{res_information['response']['cluster']}```", inline=True)
-        resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['response']['language']}```", inline=True)
-        resposta.add_field(name="🦊⠂Dono", value=f"<@{donoid}>", inline=True)
-        resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['response']['ram'])} / {res_information['response']['ram']} MB```", inline=True)
-        resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['response']['cpu']}```", inline=True)
-        resposta.add_field(name="🕐⠂Uptime", value=f"<t:{round(res_status['response']['uptime']/1000)}:R>", inline=True)
-        resposta.add_field(name="🌐⠂Rede", value=f"```{res_status['response']['network']['total']}```", inline=True)
-        resposta.add_field(name="🏓⠂Ping", value=f"```{round(self.client.latency * 1000)}ms```", inline=True)
-        resposta.add_field(name="🔮⠂Menção", value=f"<@{self.client.user.id}>", inline=True)
-        resposta.add_field(name="🕐⠂Hora Sistema", value=f"```{now.strftime('%d/%m/%y - %H:%M')}```", inline=True)
-        resposta.add_field(name="🆔⠂Bot ID", value=f"```{self.client.user.id}```", inline=True)
-        resposta.add_field(name="🍀⠂Ambiente", value=f"```Produção```", inline=True)
+        res_information , host = await informação(self.client.user.name)
+        res_status, host = await status(self.client.user.name)
+        
+
+        if host == "squarecloud":
+          resposta = discord.Embed(
+                  colour=discord.Color.yellow(),
+                  title=f"🦊┃Informações do {self.client.user.name}",
+                  description=f"{res_information['response']['desc']}"
+              )
+          resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
+          resposta.add_field(name="🖥️⠂squarecloud", value=f"```{res_information['response']['cluster']}```", inline=True)
+          resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['response']['language']}```", inline=True)
+          resposta.add_field(name="🦊⠂Dono", value=f"<@{donoid}>", inline=True)
+          resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['response']['ram'])} / {res_information['response']['ram']} MB```", inline=True)
+          resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['response']['cpu']}```", inline=True)
+          resposta.add_field(name="🕐⠂Uptime", value=f"<t:{round(res_status['response']['uptime']/1000)}:R>", inline=True)
+          resposta.add_field(name="🌐⠂Rede", value=f"```{res_status['response']['network']['total']}```", inline=True)
+          resposta.add_field(name="🏓⠂Ping", value=f"```{round(self.client.latency * 1000)}ms```", inline=True)
+          resposta.add_field(name="🔮⠂Menção", value=f"<@{self.client.user.id}>", inline=True)
+          resposta.add_field(name="🕐⠂Hora Sistema", value=f"```{now.strftime('%d/%m/%y - %H:%M')}```", inline=True)
+          resposta.add_field(name="🆔⠂Bot ID", value=f"```{self.client.user.id}```", inline=True)
+          resposta.add_field(name="🍀⠂Ambiente", value=f"```Produção```", inline=True)
+
+        if host == "discloud":
+          resposta = discord.Embed(
+                  colour=discord.Color.yellow(),
+                  title=f"🦊┃Informações do {self.client.user.name}"
+              )
+          resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
+          resposta.add_field(name="🖥️⠂Discloud", value=f"```{res_information['apps']['name']}```", inline=True)
+          resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['apps']['lang']}```", inline=True)
+          resposta.add_field(name="🦊⠂Dono", value=f"<@{donoid}>", inline=True)
+          resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['apps']['memory'])}```", inline=True)
+          resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['apps']['cpu']}```", inline=True)
+          resposta.add_field(name="🕐⠂Uptime", value=f"{res_status['apps']['last_restart']}", inline=True)
+          resposta.add_field(name="🌐⠂Rede", value=f"```{res_status['apps']['netIO']['down']}```", inline=True)
+          resposta.add_field(name="🏓⠂Ping", value=f"```{round(self.client.latency * 1000)}ms```", inline=True)
+          resposta.add_field(name="🔮⠂Menção", value=f"<@{self.client.user.id}>", inline=True)
+          resposta.add_field(name="🕐⠂Hora Sistema", value=f"```{now.strftime('%d/%m/%y - %H:%M')}```", inline=True)
+          resposta.add_field(name="🆔⠂Bot ID", value=f"```{self.client.user.id}```", inline=True)
+          resposta.add_field(name="🍀⠂Ambiente", value=f"```Produção```", inline=True)
 
         await interaction.followup.send(embed=resposta)
       except:

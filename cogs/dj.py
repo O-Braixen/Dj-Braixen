@@ -7,14 +7,14 @@ from dotenv import load_dotenv
 
 
 load_dotenv()
-token = os.getenv("git_token")
+GIT_TOKEN = os.getenv("git_token")
 CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
 
 GITHUB_API_URL_BASE = os.getenv("git_repositorio")
 PASTAS = ["musicas", "anuncios"]
-HEADERS = {"Authorization": f"token {token}"}  # Substitua pelo seu token pessoal
+HEADERS = {"Authorization": f"token {GIT_TOKEN}"}  # Substitua pelo seu token pessoal
 
-MAX_TENTATIVAS = 10
+MAX_TENTATIVAS = 50
 
 
 
@@ -29,6 +29,7 @@ class MusicBot(commands.Cog):
         self.current_song = None   #MUSICA ATUAL TOCANDO
         self.current_announcement = False   #ANUNCIO ATUAL
         self.ffmpeg_options = {            'before_options': ' -nostdin',  'options': '-vn -f s16le -b:a 192k'         }
+        self.status_msg = None  # Para guardar a mensagem de status
 
 
     
@@ -55,14 +56,18 @@ class MusicBot(commands.Cog):
     async def baixar_arquivos(self, tentativa=1):
         if tentativa > MAX_TENTATIVAS:
             print("❌ - Limite de tentativas atingido. Abortando download.")
+            await self.reproduzir()
             return
 
         async with aiohttp.ClientSession() as session:
+            if GITHUB_API_URL_BASE is None or GIT_TOKEN is None:
+                print("❌ - SEM DADOS DE REPOSITORIO, POR FAVOR VERIFIQUE O ARQUIVO .ENV")
+                return
             for pasta_remota in PASTAS:
                 pasta_local = os.path.join("musicas_repo", pasta_remota)
                 if not os.path.exists(pasta_local):
                     os.makedirs(pasta_local)
-
+                
                 url = f"{GITHUB_API_URL_BASE}/{pasta_remota}"
                 async with session.get(url, headers=HEADERS) as response:
                     if response.status == 200:
@@ -80,7 +85,7 @@ class MusicBot(commands.Cog):
                                     with open(caminho_arquivo, "wb") as f:
                                         f.write(await download_response.read())
                                     print(f"✅ - Baixado: {nome_arquivo}")
-                                    await asyncio.sleep(2)
+                                    await asyncio.sleep(1)
                                 else:
                                     print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
                                     print("🔁 - Reiniciando tentativa de download...")
@@ -102,6 +107,13 @@ class MusicBot(commands.Cog):
         channel = self.client.get_channel(self.voice_channel_id)
         if channel:
             try:
+                try:
+                    async for msg in channel.history(limit=None):
+                        await channel.purge(limit=100)
+                        await asyncio.sleep(1)  # Evita ser bloqueado por flood
+                except Exception as e:
+                    print(f"❌ - Erro ao limpar mensagens do canal: {e}")
+
                 if not self.check_music.is_running():
                     self.channel = channel
                     self.check_music.start()  # Verificação contínua.
@@ -207,7 +219,6 @@ class MusicBot(commands.Cog):
                 print(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
             except Exception as e:
                 print(f"❌ - Erro ao reconectar: {e}")
-                await vc.cleanup()
                 await vc.disconnect()
         
         # Verifica se a música parou
@@ -217,7 +228,6 @@ class MusicBot(commands.Cog):
                 await self.play_music(vc)
             except Exception as e:
                 print(f"❌ - Erro ao reiniciar o stream: {e}")
-                await vc.cleanup()
                 await vc.disconnect()
         
 
@@ -236,24 +246,46 @@ class MusicBot(commands.Cog):
 
     # LOOP DE ATUALIZAÇÃO DE STATUS
     async def update_status(self, song, vc):
+        now = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo'))
         song = Path(song).stem
-        #Atualiza o status do bot com o nome da música.
         await self.client.change_presence(activity=discord.CustomActivity(name=f"Ouvindo {song}"))
-        #await vc.channel.edit(status=f"Ouvindo {song}") #comentado por gerar muito historico na BH
-        await vc.channel.send(f"Ouvindo {song}")
+        embed = discord.Embed(description=f"## 🎵 • Tocando agora\n\n**{song}**",color=0xFBC02D)  # amarelo estilo Braixen
+        embed.set_footer(text=f"{self.client.user.name} • Braixen's House • {now.hour}:{now.minute}")
+        embed.set_thumbnail(url=self.client.user.avatar.url)
+        try:
+            if self.status_msg:
+                try:
+                    await self.status_msg.edit(embed=embed)
+                except discord.NotFound:
+                    # Mensagem foi deletada, então envia uma nova
+                    self.status_msg = await vc.channel.send(embed=embed)
+            else:
+                self.status_msg = await vc.channel.send(embed=embed)
+        except Exception as e:
+            print(f"Erro ao atualizar mensagem de status: {e}")
 
 
 
     # Monitorar Memoria no sistema DJ
-    @tasks.loop(seconds=15)
+    @tasks.loop(seconds=60)
     async def memory_check(self):
-        res_status = await status(self.client.user.name)
-        ram_str = res_status['response']['ram']
-        ram_value = float(ram_str.replace("MB", "").strip())
-        if ram_value >= 200:
-            print("🤖 - Uso de RAM alto! Reiniciando o app pela Square Cloud...")
-            await asyncio.sleep(30)
-            await restart(self.client.user.name)
+        try:
+            res_status, host = await status(self.client.user.name)
+            if host == "squarecloud":
+                ram_str = res_status['response']['ram']
+                limit_ram = 200
+            if host == "discloud":
+                ram_str = res_status['apps']['memory'].split('/')[0]
+                limit_ram = 80
+            
+            ram_value = float(ram_str.replace("MB", "").strip())
+            if ram_value >= limit_ram:
+                print(f"🤖 - Uso de RAM alto! Reiniciando o app pela {host}...")
+                await asyncio.sleep(30)
+                await restart(self.client.user.name)
+                
+        except Exception as e :print(f"🤖 - falha ao checar memoria na hospedagem...\nError: {e}")
+
 
 
 

@@ -1,4 +1,4 @@
-import discord, random, asyncio, os, datetime , pytz , aiohttp , gc
+import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess
 from discord.ext import commands , tasks
 from pathlib import Path
 from discord import app_commands
@@ -26,7 +26,6 @@ class MusicBot(commands.Cog):
         self.played_songs = set()
         self.music_folder = os.path.join("musicas_repo", "musicas")  # Nova pasta de músicas
         self.announcement_folder = os.path.join("musicas_repo", "anuncios")  # Pasta de anúncios
-        self.current_song = None   #MUSICA ATUAL TOCANDO
         self.current_announcement = False   #ANUNCIO ATUAL
         self.ffmpeg_options = {            'before_options': ' -nostdin',  'options': '-vn -f s16le -b:a 192k'         }
         self.status_msg = None  # Para guardar a mensagem de status
@@ -174,8 +173,12 @@ class MusicBot(commands.Cog):
                     await asyncio.sleep(60)
                     continue
                 path = os.path.join(self.music_folder, song)
-                self.current_song = song
-                print(f"💿 - Tocando Agora: {self.current_song}")
+                # Verifica se o arquivo está ok com ffmpeg antes de tentar tocar
+                if not await self.verify_and_cleanup_audio_file(path):
+                    await asyncio.sleep(1)
+                    continue
+                
+                print(f"💿 - Tocando Agora: {song}")
                 await self.update_status(song, vc)
             
             # Separar para ter acesso ao FFmpegPCMAudio diretamente
@@ -204,6 +207,38 @@ class MusicBot(commands.Cog):
 
             gc.collect()
             await asyncio.sleep(1)
+
+
+
+
+
+
+    #Verifica se um arquivo de áudio é válido usando ffmpeg.
+    async def verify_and_cleanup_audio_file(self, path):
+        #Verifica e deleta o arquivo se estiver corrompido.
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                'ffmpeg', '-v', 'error', '-i', path, '-f', 'null', '-',
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+            exit_code = await proc.wait()
+            if exit_code != 0:
+                print(f"🗑️ - Arquivo corrompido ou inválido. Deletando: {path}")
+                try:
+                    os.remove(path)
+                except Exception as e:
+                    print(f"⚠️ - Erro ao deletar arquivo: {e}")
+                return False
+            return True
+        except Exception as e:
+            print(f"⚠️ - Erro ao verificar arquivo com ffmpeg: {e}")
+            return False
+
+
+
+
+
 
       
 
@@ -263,7 +298,7 @@ class MusicBot(commands.Cog):
             else:
                 self.status_msg = await vc.channel.send(embed=embed)
         except Exception as e:
-            print(f"Erro ao atualizar mensagem de status: {e}")
+            print(f"❌ - Erro ao atualizar mensagem de status: {e}")
 
 
 

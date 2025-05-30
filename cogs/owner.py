@@ -96,7 +96,7 @@ class owner(commands.Cog):
         await self.client.user.edit(username=novo_nome)
         print(f"🤖 - Nome do bot foi alterado para {novo_nome}")
       except discord.HTTPException as e:
-        print(f"Erro ao alterar nome do bot: {e}")
+        print(f"❌ - Erro ao alterar nome do bot: {e}")
 
 
 

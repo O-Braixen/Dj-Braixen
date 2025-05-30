@@ -36,7 +36,7 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print("🎵 - Modúlo DJ carregado.")
-        await asyncio.sleep(10)
+        await asyncio.sleep(5)
         if not self.memory_check.is_running():
             self.memory_check.start()  # Inicia a verificação de memoria.
         await self.verificar_arquivos()
@@ -47,6 +47,7 @@ class MusicBot(commands.Cog):
 
       # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
     async def verificar_arquivos(self):
+        print("🌐 - Iniciando verificação de arquivos.")
         await self.baixar_arquivos()
 
 
@@ -84,7 +85,7 @@ class MusicBot(commands.Cog):
                                     with open(caminho_arquivo, "wb") as f:
                                         f.write(await download_response.read())
                                     print(f"✅ - Baixado: {nome_arquivo}")
-                                    await asyncio.sleep(1.5)
+                                    await asyncio.sleep(0.2)
                                 else:
                                     print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
                                     print("🔁 - Reiniciando tentativa de download...")
@@ -95,7 +96,7 @@ class MusicBot(commands.Cog):
                         print(f"❌ - Erro ao acessar {url}: {response.status}")
                         print("🔁 - Reiniciando tentativa de download...")
                         return await self.baixar_arquivos(tentativa + 1)
-            print("✅ - Biblioteca de musicas sincronizada com Github")
+            print("✅ - Biblioteca de musicas sincronizada com Github\n\n")
             await self.reproduzir()
 
 
@@ -173,17 +174,18 @@ class MusicBot(commands.Cog):
                     await asyncio.sleep(60)
                     continue
                 path = os.path.join(self.music_folder, song)                
-                print(f"💿 - Tocando Agora: {song}")
-                await self.update_status(song, vc)
             
             # Verifica se o arquivo está ok com ffmpeg antes de tentar tocar
             if not await self.verify_and_cleanup_audio_file(path):
-                await asyncio.sleep(1)
                 continue
             # Separar para ter acesso ao FFmpegPCMAudio diretamente
             ffmpeg_source = discord.FFmpegPCMAudio(path, **self.ffmpeg_options)
             source = discord.PCMVolumeTransformer(ffmpeg_source, volume=0.5)
             done = asyncio.Event()
+            # Define o status e começa a reproduzir a musica
+            print(f"💿 - Tocando Agora: {song}")
+            await self.update_status(song, vc)
+
             def after_playing(error):
                 if error:
                     print(f"❌ - Erro ao reproduzir: {error}")
@@ -214,22 +216,28 @@ class MusicBot(commands.Cog):
 
     #Verifica se um arquivo de áudio é válido usando ffmpeg.
     async def verify_and_cleanup_audio_file(self, path):
-        #Verifica e deleta o arquivo se estiver corrompido.
         try:
             proc = await asyncio.create_subprocess_exec(
                 'ffmpeg', '-v', 'error', '-i', path, '-f', 'null', '-',
                 stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
+                stderr=asyncio.subprocess.PIPE
             )
-            exit_code = await proc.wait()
-            if exit_code != 0:
+            _, stderr = await proc.communicate()
+            exit_code = proc.returncode
+
+            stderr_output = stderr.decode().strip()
+
+            if exit_code != 0 or "Invalid data" in stderr_output or "Header missing" in stderr_output:
                 print(f"🗑️ - Arquivo corrompido ou inválido. Deletando: {path}")
+                print(f"⚠️ stderr: {stderr_output}")
                 try:
                     os.remove(path)
                 except Exception as e:
                     print(f"⚠️ - Erro ao deletar arquivo: {e}")
                 return False
+
             return True
+
         except Exception as e:
             print(f"⚠️ - Erro ao verificar arquivo com ffmpeg: {e}")
             return False
@@ -302,7 +310,7 @@ class MusicBot(commands.Cog):
 
 
     # Monitorar Memoria no sistema DJ
-    @tasks.loop(seconds=60)
+    @tasks.loop(seconds=20)
     async def memory_check(self):
         try:
             res_status, host = await status(self.client.user.name)
@@ -316,7 +324,7 @@ class MusicBot(commands.Cog):
             ram_value = float(ram_str.replace("MB", "").strip())
             if ram_value >= limit_ram:
                 print(f"🤖 - Uso de RAM alto! Reiniciando o app pela {host}...")
-                await asyncio.sleep(30)
+                await asyncio.sleep(10)
                 await restart(self.client.user.name)
                 
         except Exception as e :print(f"🤖 - falha ao checar memoria na hospedagem...\nError: {e}")

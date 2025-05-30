@@ -172,15 +172,14 @@ class MusicBot(commands.Cog):
                     print(f"❌ - Nenhuma música encontrada na pasta.")
                     await asyncio.sleep(60)
                     continue
-                path = os.path.join(self.music_folder, song)
-                # Verifica se o arquivo está ok com ffmpeg antes de tentar tocar
-                if not await self.verify_and_cleanup_audio_file(path):
-                    await asyncio.sleep(1)
-                    continue
-                
+                path = os.path.join(self.music_folder, song)                
                 print(f"💿 - Tocando Agora: {song}")
                 await self.update_status(song, vc)
             
+            # Verifica se o arquivo está ok com ffmpeg antes de tentar tocar
+            if not await self.verify_and_cleanup_audio_file(path):
+                await asyncio.sleep(1)
+                continue
             # Separar para ter acesso ao FFmpegPCMAudio diretamente
             ffmpeg_source = discord.FFmpegPCMAudio(path, **self.ffmpeg_options)
             source = discord.PCMVolumeTransformer(ffmpeg_source, volume=0.5)

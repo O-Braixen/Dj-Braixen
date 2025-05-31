@@ -251,27 +251,45 @@ class MusicBot(commands.Cog):
 
     #Verifica se a música ainda está tocando e se o bot está conectado.
     @tasks.loop(minutes=2)
-    async def check_music(self):           
-            # Verifica se o bot ainda está conectado ao canal de voz
+    async def check_music(self):
         channel = self.channel
+        backoff_delay = 1  # começa com 1 segundo
+
+        for attempt in range(5):  # tenta reconectar no máximo 5 vezes por checagem
+            vc = discord.utils.get(self.client.voice_clients, guild=channel.guild)
+
+            if not vc or not vc.is_connected():
+                try:
+                    vc = await channel.connect()
+                    await self.play_music(vc)
+                    print(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
+                    break  # reconectado com sucesso, sai do loop
+                except Exception as e:
+                    print(f"❌ - Erro ao reconectar (tentativa {attempt + 1}): {e}")
+                    if vc:
+                        try:
+                            await vc.disconnect()
+                        except Exception:
+                            pass
+                    await asyncio.sleep(backoff_delay)
+                    backoff_delay = min(backoff_delay * 2, 60)  # dobra até máximo de 60s
+            else:
+                break  # já está conectado
+
+        # Tenta reiniciar a música se estiver conectado e parado
         vc = discord.utils.get(self.client.voice_clients, guild=channel.guild)
-        if not vc or not vc.is_connected():
-            try:
-                vc = await channel.connect()
-                await self.play_music(vc)
-                print(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
-            except Exception as e:
-                print(f"❌ - Erro ao reconectar: {e}")
-                await vc.disconnect()
-        
-        # Verifica se a música parou
-        if vc and not vc.is_playing() and not vc.is_paused():
-            print(f"🔄️ - Música parou. Reiniciando stream...")
+        if vc and vc.is_connected() and not vc.is_playing() and not vc.is_paused():
+            print("🔄️ - Música parou. Reiniciando stream...")
             try:
                 await self.play_music(vc)
             except Exception as e:
                 print(f"❌ - Erro ao reiniciar o stream: {e}")
-                await vc.disconnect()
+                try:
+                    await vc.disconnect()
+                except Exception:
+                    await restart(self.client.user.name)
+                    pass
+
         
 
         # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO

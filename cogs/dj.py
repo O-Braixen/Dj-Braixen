@@ -1,4 +1,4 @@
-import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess
+import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess , tempfile
 from discord.ext import commands , tasks
 from pathlib import Path
 from discord import app_commands
@@ -8,10 +8,11 @@ from dotenv import load_dotenv
 
 load_dotenv()
 GIT_TOKEN = os.getenv("git_token")
+DONOID = int(os.getenv("DONO_ID")) #acessa e define o id do dono
 CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
 
 GITHUB_API_URL_BASE = os.getenv("git_repositorio")
-PASTAS = ["musicas", "anuncios"]
+PASTAS = ["anuncios","musicas"]
 HEADERS = {"Authorization": f"token {GIT_TOKEN}"}  # Substitua pelo seu token pessoal
 
 MAX_TENTATIVAS = 50
@@ -29,6 +30,7 @@ class MusicBot(commands.Cog):
         self.current_announcement = False   #ANUNCIO ATUAL
         self.ffmpeg_options = {            'before_options': ' -nostdin',  'options': '-vn -f s16le -b:a 192k'         }
         self.status_msg = None  # Para guardar a mensagem de status
+        self._falhas_memoria = 0  # inicializa o contador
 
 
     
@@ -36,9 +38,11 @@ class MusicBot(commands.Cog):
     @commands.Cog.listener()
     async def on_ready(self):
         print("🎵 - Modúlo DJ carregado.")
-        await asyncio.sleep(5)
+        #await asyncio.sleep(5)
         if not self.memory_check.is_running():
             self.memory_check.start()  # Inicia a verificação de memoria.
+        
+        await self.reproduzir()
         await self.verificar_arquivos()
         
         
@@ -52,11 +56,12 @@ class MusicBot(commands.Cog):
 
 
 
+    
     # FUNÇÃO PARA BAIXAR OS ARQUIVOS DO REPOSITÓRIO
     async def baixar_arquivos(self, tentativa=1):
         if tentativa > MAX_TENTATIVAS:
             print("❌ - Limite de tentativas atingido. Abortando download.")
-            await self.reproduzir()
+            #await self.reproduzir()
             return
 
         async with aiohttp.ClientSession() as session:
@@ -85,7 +90,7 @@ class MusicBot(commands.Cog):
                                     with open(caminho_arquivo, "wb") as f:
                                         f.write(await download_response.read())
                                     print(f"✅ - Baixado: {nome_arquivo}")
-                                    await asyncio.sleep(0.2)
+                                    await asyncio.sleep(5)
                                 else:
                                     print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
                                     print("🔁 - Reiniciando tentativa de download...")
@@ -97,7 +102,8 @@ class MusicBot(commands.Cog):
                         print("🔁 - Reiniciando tentativa de download...")
                         return await self.baixar_arquivos(tentativa + 1)
             print("✅ - Biblioteca de musicas sincronizada com Github\n\n")
-            await self.reproduzir()
+            #await self.reproduzir()
+    
 
 
 
@@ -149,6 +155,24 @@ class MusicBot(commands.Cog):
 
 
 
+        # PROCURA UM JINGLE ALEATORIA E SELECIONA
+    def get_random_jingle(self):
+        try:
+            jingles = [
+                f for f in os.listdir(self.announcement_folder)
+                if f.endswith(".mp3") and f.startswith("jingle")
+            ]
+            return os.path.join(self.announcement_folder, random.choice(jingles)) if jingles else None
+        except Exception as e:
+            print(f"❌ - Erro ao listar jingles: {e}")
+            return None
+
+
+
+
+
+
+
         # PUXA UM ANUNCIO EM UM DETEMINADO HORARIO
     def get_hourly_announcement(self):
         current_hour = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo')).hour
@@ -158,56 +182,133 @@ class MusicBot(commands.Cog):
     
 
 
+        # Pega duração da música
+    async def get_duration(self, path):
+        proc = await asyncio.create_subprocess_exec(
+            "ffprobe", "-v", "error", "-show_entries", "format=duration", "-of",
+            "default=noprint_wrappers=1:nokey=1", path,
+            stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+        out, _ = await proc.communicate()
+        return float(out.decode().strip())
+
+
+
 
 
         # TOCA MUSICA DE FATO
     async def play_music(self, vc):
         while vc.is_connected():
             if self.current_announcement:
-                print(f"‼️ - Tocando Anúncio: {self.current_announcement}")
-                path = self.current_announcement
+                song = self.current_announcement
+                path = song
                 self.current_announcement = False
+                fade = False  # Não faz fade em anúncios
             else:
                 song = self.get_random_song()
                 if not song:
                     print(f"❌ - Nenhuma música encontrada na pasta.")
                     await asyncio.sleep(60)
                     continue
-                path = os.path.join(self.music_folder, song)                
-            
-            # Verifica se o arquivo está ok com ffmpeg antes de tentar tocar
+                path = os.path.join(self.music_folder, song)
+                fade = True
+
+            # Verifica arquivo
             if not await self.verify_and_cleanup_audio_file(path):
                 continue
-            # Separar para ter acesso ao FFmpegPCMAudio diretamente
-            ffmpeg_source = discord.FFmpegPCMAudio(path, **self.ffmpeg_options)
-            source = discord.PCMVolumeTransformer(ffmpeg_source, volume=0.5)
+
+            source = None
+            ffmpeg_source = None
             done = asyncio.Event()
-            # Define o status e começa a reproduzir a musica
-            print(f"💿 - Tocando Agora: {song}")
-            await self.update_status(song, vc)
 
-            def after_playing(error):
-                if error:
-                    print(f"❌ - Erro ao reproduzir: {error}")
-                done.set()
-            vc.play(source, after=after_playing)
-            await done.wait()
-
-            # Liberação de memória manual após reprodução
             try:
-                if hasattr(source, "cleanup"):
-                    source.cleanup()
-                if hasattr(ffmpeg_source, "cleanup"):
-                    ffmpeg_source.cleanup()
-                if hasattr(ffmpeg_source, 'proc'):
-                    ffmpeg_source.proc.kill()
+                if fade:
+                    duration = await self.get_duration(path)
+                    fade_out_start = max(duration - 3, 0)
+
+                    ffmpeg_source = discord.FFmpegPCMAudio(
+                        path,
+                        before_options="-nostdin",
+                        options=f"-af 'afade=t=in:ss=0:d=3,afade=t=out:st={fade_out_start}:d=3' -vn -f s16le -b:a 192k"
+                    )
+                else:
+                    ffmpeg_source = discord.FFmpegPCMAudio(path, **self.ffmpeg_options)
+
+                source = discord.PCMVolumeTransformer(ffmpeg_source, volume=0.5)
+                await self.update_status(song, vc)
+
+                def after_playing(error):
+                    if error:
+                        print(f"❌ - Erro ao reproduzir: {error}")
+                    done.set()
+
+                vc.play(source, after=after_playing)
+                await done.wait()
+
+            finally:
+                vc.stop()
+                try:
+                    if source and hasattr(source, "cleanup"):
+                        source.cleanup()
+                    if ffmpeg_source and hasattr(ffmpeg_source, "cleanup"):
+                        ffmpeg_source.cleanup()
+                    if ffmpeg_source and hasattr(ffmpeg_source, "proc") and ffmpeg_source.proc:
+                        ffmpeg_source.proc.kill()
+                        ffmpeg_source.proc.wait()
+                except Exception as e:
+                    print(f"🗑️ - Erro no cleanup: {e}")
                 del source
                 del ffmpeg_source
-            except Exception as e:
-                print(f"🗑️ - Erro no cleanup: {e}")
+                gc.collect()
 
-            gc.collect()
-            await asyncio.sleep(1)
+            # Chance de tocar jingle
+            if random.random() < 0.2:
+                jingle = self.get_random_jingle()
+                if jingle and await self.verify_and_cleanup_audio_file(jingle):
+                    jingle_source = None
+                    jingle_ffmpeg = None
+                    done = asyncio.Event()
+                    try:
+                        print(f"🔊 - Tocando jingle: {os.path.basename(jingle)}")
+                        jingle_ffmpeg = discord.FFmpegPCMAudio(jingle, **self.ffmpeg_options)
+                        jingle_source = discord.PCMVolumeTransformer(jingle_ffmpeg, volume=0.5)
+
+                        def after_jingle(error):
+                            if error:
+                                print(f"❌ - Erro ao tocar jingle: {error}")
+                            done.set()
+
+                        vc.stop()
+                        vc.play(jingle_source, after=after_jingle)
+                        await done.wait()
+
+                    except Exception as e:
+                        print(f"❌ - Erro ao tocar jingle: {e}")
+                    finally:
+                        vc.stop()
+                        try:
+                            if jingle_source and hasattr(jingle_source, "cleanup"):
+                                jingle_source.cleanup()
+                            if jingle_ffmpeg and hasattr(jingle_ffmpeg, "cleanup"):
+                                jingle_ffmpeg.cleanup()
+                            if jingle_ffmpeg and hasattr(jingle_ffmpeg, "proc") and jingle_ffmpeg.proc:
+                                jingle_ffmpeg.proc.kill()
+                                jingle_ffmpeg.proc.wait()
+                        except Exception as e:
+                            print(f"🗑️ - Erro no cleanup do jingle: {e}")
+                        del jingle_source
+                        del jingle_ffmpeg
+                        gc.collect()
+
+
+
+
+
+
+
+
+
+               
 
 
 
@@ -309,9 +410,10 @@ class MusicBot(commands.Cog):
     async def update_status(self, song, vc):
         now = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo'))
         song = Path(song).stem
+        print(f"💿 - Tocando Agora: {song}")
         await self.client.change_presence(activity=discord.CustomActivity(name=f"Ouvindo {song}"))
         embed = discord.Embed(description=f"## 🎵 • Tocando agora\n\n**{song}**",color=0xFBC02D)  # amarelo estilo Braixen
-        embed.set_footer(text=f"{self.client.user.name} • Braixen's House • {now.hour}:{now.minute}")
+        embed.set_footer(text=f"{self.client.user.name} • Braixen's House • {now.hour:02d}:{now.minute:02d}")
         embed.set_thumbnail(url=self.client.user.avatar.url)
         try:
             if self.status_msg:
@@ -328,30 +430,108 @@ class MusicBot(commands.Cog):
 
 
     # Monitorar Memoria no sistema DJ
-    @tasks.loop(seconds=20)
+    @tasks.loop(seconds=60)
     async def memory_check(self):
         try:
             res_status, host = await status(self.client.user.name)
+
             if host == "squarecloud":
                 ram_str = res_status['response']['ram']
-                limit_ram = 235
-            if host == "discloud":
+                limit_ram = 210
+            elif host == "discloud":
                 ram_str = res_status['apps']['memory'].split('/')[0]
                 limit_ram = 90
-            
+            else:
+                return  # host desconhecido, ignora
+
             ram_value = float(ram_str.replace("MB", "").strip())
+            self._falhas_memoria = 0  # resetar contador se for bem-sucedido
+
             if ram_value >= limit_ram:
                 print(f"🤖 - Uso de RAM alto! Reiniciando o app pela {host}...")
+                await restart(self.client.user.name)
+
+        except Exception as e:
+            self._falhas_memoria += 1
+            print(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/300)...\nError: {e}")
+            if self._falhas_memoria >= 300:
+                print("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
                 await asyncio.sleep(10)
                 await restart(self.client.user.name)
-                
-        except Exception as e :print(f"🤖 - falha ao checar memoria na hospedagem...\nError: {e}")
 
 
 
 
 #-----------------COMANDOS AQUI-------------------------
 #Inicia instancia e vincula com a classe
+    dj=app_commands.Group(name="musica",description="Comandos de gestão do sistema DJ Braixen.",allowed_installs=app_commands.AppInstallationType(guild=True,user=False),allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False))
+
+
+    @dj.command(name="verificar", description="🤖⠂Verifica todos os arquivos de música e remove os corrompidos.")
+    async def verificar_musicas_slash(self, interaction: discord.Interaction):
+        if interaction.user.id != DONOID:
+            await interaction.response.send_message("Este comando é somente para o Dono do bot usar ~kyuu.", ephemeral=True)
+            return
+
+        await interaction.response.send_message("🔍 - Iniciando verificação de arquivos de áudio ~kyuu...")
+        status_msg = await interaction.original_response()
+
+        total = 0
+        removidos = 0
+        verificados = 0
+        arquivos_removidos = []
+
+        for pasta in [self.music_folder, self.announcement_folder]:
+            for nome_arquivo in os.listdir(pasta):
+                if not nome_arquivo.endswith(".mp3"):
+                    continue
+
+                caminho = os.path.join(pasta, nome_arquivo)
+                total += 1
+                valido = await self.verify_and_cleanup_audio_file(caminho)
+                verificados += 1
+                if not valido:
+                    removidos += 1
+                    arquivos_removidos.append(nome_arquivo)
+
+                if verificados % 20 == 0:
+                    await status_msg.edit(content=f"🔍 - Verificando arquivos... {verificados} analisados até agora ~kyuuu...")
+
+        if removidos > 0:
+            lista_formatada = "\n".join(f"- {nome}" for nome in arquivos_removidos)
+            conteudo_final = (
+                f"✅ - Verificação concluída.\n"
+                f"{total} arquivos analisados, {removidos} removidos.\n\n"
+                f"🗑️ - Arquivos removidos:\n{lista_formatada}"
+            )
+        else:
+            conteudo_final = f"✅ - Verificação concluída. {total} arquivos analisados, nenhum removido ~kyuu."
+
+        await status_msg.edit(content=conteudo_final)
+
+
+
+
+
+    @dj.command(name="tocadas", description="📻⠂Mostra a lista completa de músicas já tocadas pelo bot.")
+    async def musicas_tocadas_slash(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        if not self.played_songs:
+            await interaction.followup.send("Nenhuma música foi tocada ainda ~kyuu.", ephemeral=True)
+            return
+
+        lista = "\n".join(f"- {song}" for song in sorted(self.played_songs))
+
+        # Se passar do limite de 2000 caracteres, envia como arquivo txt
+        if len(lista) > 1900:
+            import io
+            file = discord.File(fp=io.BytesIO(lista.encode()), filename="musicas_tocadas.txt")
+            await interaction.followup.send("✅ - Lista completa de músicas já tocadas:", file=file, ephemeral=True)
+        else:
+            await interaction.followup.send(f"✅ - Músicas já tocadas:\n{lista}", ephemeral=True)
+
+
 
 
 

@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 #CARREGA E LE O ARQUIVO .env na raiz
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env')) #load .env da raiz
 DONOID = int(os.getenv("DONO_ID")) #acessa e define o id do dono
-
+CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
 
 #Função status
 async def botstatus(self,interaction):
@@ -107,7 +107,7 @@ class owner(commands.Cog):
     if f"<@{self.client.user.id}>" in message.content and message.author != self.client.user:
       resposta = discord.Embed( 
         colour=discord.Color.yellow(),
-          description= "Preparado para curtir muita musica pokémon aqui na Braixen's House\n\nVenha passar um tempinho comigo em <#1229394932113084518> onde iremos deslizar nas ondas sonoras de varias musicas do mundo pokémon com sua DJ favorita."
+          description= f"Preparado para curtir muita musica pokémon aqui na Braixen's House\n\nVenha passar um tempinho comigo em <#{CHANNEL_ID}> onde iremos deslizar nas ondas sonoras de varias musicas do mundo pokémon com sua DJ favorita."
         )
       
       resposta.set_author(name= "Kyuuu! Olá, sou a {}~!".format(self.client.user.name) ,icon_url=self.client.user.avatar.url)

@@ -638,9 +638,9 @@ class MusicBot(commands.Cog):
 
 
     @dj.command(name="tocar", description="🎶⠂Escolha uma música para tocar logo após a atual.")
-    @app_commands.describe(musica="Escolha a música que será tocada em seguida.")
-    async def tocar_slash(self, interaction: discord.Interaction, musica: str):
-        path = os.path.join(self.music_folder, musica)
+    @app_commands.describe(música="Escolha a música que será tocada em seguida.")
+    async def tocar_slash(self, interaction: discord.Interaction, música: str):
+        path = os.path.join(self.music_folder, música)
 
         if not os.path.exists(path):
             await interaction.response.send_message("❌ - Música não encontrada.", ephemeral=True)
@@ -648,9 +648,9 @@ class MusicBot(commands.Cog):
 
         # define como a próxima música
         self.current_announcement = path  
-        await interaction.response.send_message(f"✅ - **{musica}** será tocada a seguir ~kyuu.", ephemeral=True)
+        await interaction.response.send_message(f"✅ - **{música}** será tocada a seguir ~kyuu.", ephemeral=True)
 
-    @tocar_slash.autocomplete('musica')
+    @tocar_slash.autocomplete('música')
     async def autocomplete_musicas(self, interaction: discord.Interaction, current: str):
         files = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
         return [ app_commands.Choice(name=f, value=f) for f in files if current.lower() in f.lower()][:25]  # Discord permite até 25 sugestões

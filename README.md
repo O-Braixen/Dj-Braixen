@@ -59,6 +59,8 @@ Sempre renomeie o H como Maiusculo.
 - /dj restart
 - /musica tocadas
 - /musica verificar
+- /musica mover
+- /musica tocar
 - Menção do bot
 
 

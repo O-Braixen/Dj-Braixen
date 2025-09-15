@@ -1,9 +1,11 @@
-import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess , tempfile
+import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess , json 
 from discord.ext import commands , tasks
 from pathlib import Path
 from discord import app_commands
 from cogs.essential.host import status,restart
 from dotenv import load_dotenv
+from functools import partial
+
 
 
 load_dotenv()
@@ -19,18 +21,35 @@ MAX_TENTATIVAS = 50
 
 
 
+
+
+
+
 class MusicBot(commands.Cog):
     def __init__(self , client: commands.Bot):
         self.client = client
         self.voice_channel_id = CHANNEL_ID  # ID do canal de voz.
         self.synced = False
-        self.played_songs = set()
         self.music_folder = os.path.join("musicas_repo", "musicas")  # Nova pasta de músicas
         self.announcement_folder = os.path.join("musicas_repo", "anuncios")  # Pasta de anúncios
         self.current_announcement = False   #ANUNCIO ATUAL
         self.ffmpeg_options = {            'before_options': ' -nostdin',  'options': '-vn -f s16le -b:a 192k'         }
         self.status_msg = None  # Para guardar a mensagem de status
         self._falhas_memoria = 0  # inicializa o contador
+        self.played_songs_file = "played_songs.json"
+        self.played_songs = []
+
+        # Carregar do arquivo se existir
+        if os.path.exists(self.played_songs_file):
+            try:
+                with open(self.played_songs_file, "r", encoding="utf-8") as f:
+                    self.played_songs = json.load(f)
+            except Exception as e:
+                print(f"⚠️ - Erro ao carregar played_songs.json: {e}")
+        else:
+            # Cria o arquivo vazio
+            with open(self.played_songs_file, "w", encoding="utf-8") as f:
+                json.dump([], f)
 
 
     
@@ -133,19 +152,29 @@ class MusicBot(commands.Cog):
 
 
 
+        #SALVAR O JSON COM AS MUSICAS JÀ TOCADAS
+    def save_played_songs(self):
+        try:
+            with open(self.played_songs_file, "w", encoding="utf-8") as f:
+                json.dump(self.played_songs, f, ensure_ascii=False, indent=2)
+        except Exception as e:
+            print(f"⚠️ - Erro ao salvar played_songs.json: {e}")
+
+
 
         # PROCURA UMA MUSICA ALEATORIA E SELECIONA
     def get_random_song(self):
         try:
             files = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
-            remaining_songs = list(set(files) - self.played_songs)
+            remaining_songs = [f for f in files if f not in self.played_songs]
+
 
             if not remaining_songs:
                 self.played_songs.clear()
                 remaining_songs = files
 
             song = random.choice(remaining_songs)
-            self.played_songs.add(song)
+            self.played_songs.append(song)
             return song
 
         except Exception as e:
@@ -199,11 +228,14 @@ class MusicBot(commands.Cog):
         # TOCA MUSICA DE FATO
     async def play_music(self, vc):
         while vc.is_connected():
+            skip_jingle_next = False
+
             if self.current_announcement:
                 song = self.current_announcement
                 path = song
                 self.current_announcement = False
                 fade = False  # Não faz fade em anúncios
+                skip_jingle_next = True 
             else:
                 song = self.get_random_song()
                 if not song:
@@ -244,6 +276,7 @@ class MusicBot(commands.Cog):
 
                 vc.play(source, after=after_playing)
                 await done.wait()
+                self.save_played_songs()  # Salva sempre que adiciona
 
             finally:
                 vc.stop()
@@ -262,7 +295,7 @@ class MusicBot(commands.Cog):
                 gc.collect()
 
             # Chance de tocar jingle
-            if random.random() < 0.2:
+            if not skip_jingle_next and random.random() < 0.2:
                 jingle = self.get_random_jingle()
                 if jingle and await self.verify_and_cleanup_audio_file(jingle):
                     jingle_source = None
@@ -351,7 +384,7 @@ class MusicBot(commands.Cog):
       
 
     #Verifica se a música ainda está tocando e se o bot está conectado.
-    @tasks.loop(minutes=2)
+    @tasks.loop(minutes=1)
     async def check_music(self):
         channel = self.channel
         backoff_delay = 1  # começa com 1 segundo
@@ -393,6 +426,9 @@ class MusicBot(commands.Cog):
 
         
 
+
+
+
         # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
     @tasks.loop(minutes=5)
     async def hourly_announcements(self):
@@ -406,6 +442,11 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
     # LOOP DE ATUALIZAÇÃO DE STATUS
     async def update_status(self, song, vc):
         now = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo'))
@@ -415,17 +456,28 @@ class MusicBot(commands.Cog):
         embed = discord.Embed(description=f"## 🎵 • Tocando agora\n\n**{song}**",color=0xFBC02D)  # amarelo estilo Braixen
         embed.set_footer(text=f"{self.client.user.name} • Braixen's House • {now.hour:02d}:{now.minute:02d}")
         embed.set_thumbnail(url=self.client.user.avatar.url)
+
+        view = discord.ui.View(timeout=None)
+        consultarmusica = discord.ui.Button(label="Músicas Tocadas",style=discord.ButtonStyle.blurple,emoji="🎵")
+        view.add_item(item=consultarmusica)
+        consultarmusica.callback = partial( self.musicas_tocadas )
+
         try:
             if self.status_msg:
                 try:
-                    await self.status_msg.edit(embed=embed)
+                    await self.status_msg.edit(embed=embed , view= view)
                 except discord.NotFound:
                     # Mensagem foi deletada, então envia uma nova
-                    self.status_msg = await vc.channel.send(embed=embed)
+                    self.status_msg = await vc.channel.send(embed=embed , view= view)
             else:
-                self.status_msg = await vc.channel.send(embed=embed)
+                self.status_msg = await vc.channel.send(embed=embed , view= view)
         except Exception as e:
             print(f"❌ - Erro ao atualizar mensagem de status: {e}")
+
+
+
+
+
 
 
 
@@ -458,6 +510,35 @@ class MusicBot(commands.Cog):
                 print("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
                 await asyncio.sleep(10)
                 await restart(self.client.user.name)
+
+
+
+        #RETORNA AO USUARIO QUAIS MUSICAS JÀ FORAM TOCADAS
+    @commands.Cog.listener()
+    async def musicas_tocadas(self, interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        if not self.played_songs:
+            await interaction.followup.send("Nenhuma música foi tocada ainda ~kyuu.", ephemeral=True)
+            return
+
+        # Monta lista completa formatada com contador
+        lista = [f"{i}. {song}" for i, song in enumerate(self.played_songs, start=1)]
+
+        # Envia em blocos de até ~1800 caracteres
+        bloco = ""
+        for line in lista:
+            if len(bloco) + len(line) + 1 < 1800:
+                bloco += line + "\n"
+            else:
+                await interaction.followup.send(f"✅ - Músicas já tocadas:\n{bloco}", ephemeral=True)
+                bloco = line + "\n"
+
+        # Manda o último bloco restante
+        if bloco.strip():
+            await interaction.followup.send(f"✅ - Músicas já tocadas:\n{bloco}", ephemeral=True)
+
+
 
 
 
@@ -515,21 +596,64 @@ class MusicBot(commands.Cog):
 
     @dj.command(name="tocadas", description="📻⠂Mostra a lista completa de músicas já tocadas pelo bot.")
     async def musicas_tocadas_slash(self, interaction: discord.Interaction):
-        await interaction.response.defer(ephemeral=True)
+        await self.musicas_tocadas(interaction)
 
-        if not self.played_songs:
-            await interaction.followup.send("Nenhuma música foi tocada ainda ~kyuu.", ephemeral=True)
+
+
+
+
+
+
+    @dj.command(name="mover", description="🔊⠂Move o bot para outro canal de voz temporariamente.")
+    @app_commands.describe(canal="Canal de voz para onde mover o bot.")
+    async def mover_canal_slash(self, interaction: discord.Interaction, canal: discord.VoiceChannel):
+        if interaction.user.id != DONOID:
+            await interaction.response.send_message("❌ - Apenas o dono do bot pode usar este comando ~kyuu.", ephemeral=True)
             return
 
-        lista = "\n".join(f"- {song}" for song in sorted(self.played_songs))
+        await interaction.response.defer(ephemeral=True)
 
-        # Se passar do limite de 2000 caracteres, envia como arquivo txt
-        if len(lista) > 1900:
-            import io
-            file = discord.File(fp=io.BytesIO(lista.encode()), filename="musicas_tocadas.txt")
-            await interaction.followup.send("✅ - Lista completa de músicas já tocadas:", file=file, ephemeral=True)
-        else:
-            await interaction.followup.send(f"✅ - Músicas já tocadas:\n{lista}", ephemeral=True)
+        # Verifica se já está conectado em algum VC
+        vc_atual = discord.utils.get(self.client.voice_clients, guild=interaction.guild)
+
+        try:
+            if vc_atual and vc_atual.is_connected():
+                await vc_atual.disconnect(force=True)
+
+            # Conecta no novo canal
+            novo_vc = await canal.connect()
+            self.status_msg = None
+            # Reinicia o player de música nesse canal
+            await interaction.followup.send( f"✅ - Bot movido temporariamente para **{canal.name}**.")
+            await self.play_music(novo_vc)
+            
+        except Exception as e:
+            await interaction.followup.send( f"❌ - Não consegui mover para o canal {canal.mention}.\nErro: {e}" )
+            print(f"🚨 - Falha ao mover bot para novo canal de voz verifique o erro {e}")
+
+
+
+
+
+
+
+    @dj.command(name="tocar", description="🎶⠂Escolha uma música para tocar logo após a atual.")
+    @app_commands.describe(musica="Escolha a música que será tocada em seguida.")
+    async def tocar_slash(self, interaction: discord.Interaction, musica: str):
+        path = os.path.join(self.music_folder, musica)
+
+        if not os.path.exists(path):
+            await interaction.response.send_message("❌ - Música não encontrada.", ephemeral=True)
+            return
+
+        # define como a próxima música
+        self.current_announcement = path  
+        await interaction.response.send_message(f"✅ - **{musica}** será tocada a seguir ~kyuu.", ephemeral=True)
+
+    @tocar_slash.autocomplete('musica')
+    async def autocomplete_musicas(self, interaction: discord.Interaction, current: str):
+        files = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
+        return [ app_commands.Choice(name=f, value=f) for f in files if current.lower() in f.lower()][:25]  # Discord permite até 25 sugestões
 
 
 

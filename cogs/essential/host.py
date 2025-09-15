@@ -69,30 +69,39 @@ async def appname(nome):
 async def informação(nome):
     global host
     retorno = await appname(nome)
-    if host == "squarecloud":
-        res_information =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}", headers={"Authorization": square_token})
-        return res_information.json()  , host
-    if host == "discloud":
-        res_information =  requests.get(f"https://api.discloud.app/v2/app/{retorno}", headers={"api-token": discloud_token})
-        return res_information.json() , host
+    try:
+        if host == "squarecloud":
+            res_information =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}", headers={"Authorization": square_token})
+            return res_information.json()  , host
+        if host == "discloud":
+            res_information =  requests.get(f"https://api.discloud.app/v2/app/{retorno}", headers={"api-token": discloud_token})
+            return res_information.json() , host
+    except:
+        return None , None
+    
 
 async def status(nome):
     global host
     retorno = await appname(nome)
-    if host == "squarecloud":
-        res_status =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}/status", headers={"Authorization": square_token})
-        return res_status.json()  , host
-    if host == "discloud":
-        res_status =  requests.get(f"https://api.discloud.app/v2/app/{retorno}/status", headers={"api-token": discloud_token})
-        return res_status.json()  , host
-
+    try:
+        if host == "squarecloud":
+            res_status =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}/status", headers={"Authorization": square_token})
+            return res_status.json()  , host
+        if host == "discloud":
+            res_status =  requests.get(f"https://api.discloud.app/v2/app/{retorno}/status", headers={"api-token": discloud_token})
+            return res_status.json()  , host
+    except:
+        return None , None
 
 async def restart(nome):
     global host
     retorno = await appname(nome)
-    if host == "squarecloud":
-        res_status =  requests.post(f"https://api.squarecloud.app/v2/apps/{retorno}/restart",headers={"Authorization": square_token})
-        return res_status.json() , host
-    if host == "discloud":
-        res_status =  requests.put(f"https://api.discloud.app/v2/app/{retorno}/restart",headers={"api-token": discloud_token})
-        return res_status.json() , host
+    try:
+        if host == "squarecloud":
+            res_status =  requests.post(f"https://api.squarecloud.app/v2/apps/{retorno}/restart",headers={"Authorization": square_token})
+            return res_status.json() , host
+        if host == "discloud":
+            res_status =  requests.put(f"https://api.discloud.app/v2/app/{retorno}/restart",headers={"api-token": discloud_token})
+            return res_status.json() , host
+    except:
+        return None , None

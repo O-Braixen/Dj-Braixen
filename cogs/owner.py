@@ -45,7 +45,7 @@ async def botstatus(self,interaction):
           resposta = discord.Embed(
                   colour=discord.Color.yellow(),
                   title=f"🦊┃Informações do {self.client.user.name}",
-                  description=f"🖥️⠂Discloud - {res_information['apps']['name']}"
+                  description=f"🖥️⠂Discloud - CLUSTER {res_information['apps']['clusterName']}"
               )
           resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
           resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['apps']['lang']}```", inline=True)

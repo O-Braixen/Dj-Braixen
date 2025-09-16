@@ -664,8 +664,10 @@ class MusicBot(commands.Cog):
     @app_commands.describe(música="Escolha a música que será tocada em seguida.")
     async def tocar_slash(self, interaction: discord.Interaction, música: str):
         # Verifica se a DJ (bot) está no mesmo canal de voz
-        vc = getattr(self, "vc", None)  # vc atual do bot
-        if not vc or not vc.channel or vc.channel != interaction.user.voice.channel:
+
+        vc_atual = discord.utils.get(self.client.voice_clients, guild=interaction.guild)
+
+        if not vc_atual or not vc_atual.channel or interaction.user.voice is None or vc_atual.channel != interaction.user.voice.channel:
             await interaction.response.send_message( "❌ - Você precisa estar no mesmo canal de voz que eu para pedir uma música.", ephemeral=True , delete_after = 20)
             return
         path = os.path.join(self.music_folder, música)

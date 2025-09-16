@@ -12,10 +12,20 @@ Para funcionamento do bot é necessario criar um repositorio privado (private) e
 
 **Como Funciona os anúncios?**
 
-O Bot possui 2 tipos de anuncios, os de horarios fixos que ocorrem sempre em algum horario cheio tipo 9h/10h e assim vai e também os anúncios aleatórios chamados (Jingles) esses jingles podem ser reproduzidos em ordem aleátoria após cada música, e você pode colocar quantos Jingles quiser, sempre respeitando essa sequencia aqui.
+O Bot possui 2 tipos de anuncios, os de horarios fixos que ocorrem sempre em algum horario cheio tipo 9h/10h e assim vai e também os anúncios aleatórios chamados (Jingles) esses jingles podem ser reproduzidos em ordem aleátoria após cada música e também em chamadas quando existe algum pedido de musica de usuários, e você pode colocar quantos Jingles quiser, sempre respeitando essa sequencia aqui.
+
+
+*Jingles entre as músicas*
 
 📄 jingle-01.mp3
 📄 jingle-02.mp3
+
+
+*Jingles de anúncio de pedidos dos membros*
+
+📄 pedidos-01.mp3
+📄 pedidos-02.mp3
+
 
 Já a parte dos horarios fixos não suporta multiplos arquivos e sua nomeação dos arquivos deve ocorrer no formato 24H sendo apenas entre (0 e 23) para indicar cada horário, segue um exemplo.
 
@@ -32,6 +42,7 @@ Sempre renomeie o H como Maiusculo.
 📁 anuncios
     📄 9H.mp3
     📄 jingle.mp3
+    📄 pedidos.mp3
 📁 musicas
     📄 suamusica.mp3
 
@@ -43,6 +54,7 @@ Sempre renomeie o H como Maiusculo.
     📁 anuncios
         📄 9H.mp3
         📄 jingle.mp3
+        📄 pedidos.mp3
     📁 musicas
         📄 suamusica.mp3
 📄 .env
@@ -56,11 +68,11 @@ Sempre renomeie o H como Maiusculo.
 
 - /dj ping
 - /dj status
-- /dj restart
-- /musica tocadas
-- /musica verificar
-- /musica mover
-- /musica tocar
+- /dj restart (Apenas dono)
+- /radio tocadas
+- /radio verificar (Apenas dono)
+- /radio mover (Apenas dono)
+- /radio pedido
 - Menção do bot
 
 

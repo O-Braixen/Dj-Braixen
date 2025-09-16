@@ -38,6 +38,8 @@ class MusicBot(commands.Cog):
         self._falhas_memoria = 0  # inicializa o contador
         self.played_songs_file = "played_songs.json"
         self.played_songs = []
+        self.pedidos = []  # lista de pedidos
+
 
         # Carregar do arquivo se existir
         if os.path.exists(self.played_songs_file):
@@ -199,6 +201,19 @@ class MusicBot(commands.Cog):
 
 
 
+        # PROCURA UMA INTRO DE PEDIDO ALEATÓRIA
+    def get_random_pedido_intro(self):
+        try:
+            intros = [
+                f for f in os.listdir(self.announcement_folder)
+                if f.endswith(".mp3") and f.startswith("pedidos")
+            ]
+            return os.path.join(self.announcement_folder, random.choice(intros)) if intros else None
+        except Exception as e:
+            print(f"❌ - Erro ao listar intros de pedido: {e}")
+            return None
+
+
 
 
 
@@ -225,29 +240,18 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
         # TOCA MUSICA DE FATO
     async def play_music(self, vc):
-        while vc.is_connected():
-            skip_jingle_next = False
-
-            if self.current_announcement:
-                song = self.current_announcement
-                path = song
-                self.current_announcement = False
-                fade = False  # Não faz fade em anúncios
-                skip_jingle_next = True 
-            else:
-                song = self.get_random_song()
-                if not song:
-                    print(f"❌ - Nenhuma música encontrada na pasta.")
-                    await asyncio.sleep(60)
-                    continue
-                path = os.path.join(self.music_folder, song)
-                fade = True
-
-            # Verifica arquivo
+        async def _tocar(vc, path, fade=True):
+            """Toca um arquivo de áudio (com ou sem fade) e aguarda terminar"""
             if not await self.verify_and_cleanup_audio_file(path):
-                continue
+                return
 
             source = None
             ffmpeg_source = None
@@ -267,7 +271,8 @@ class MusicBot(commands.Cog):
                     ffmpeg_source = discord.FFmpegPCMAudio(path, **self.ffmpeg_options)
 
                 source = discord.PCMVolumeTransformer(ffmpeg_source, volume=0.5)
-                await self.update_status(song, vc)
+                if fade :
+                    await self.update_status(path, vc)
 
                 def after_playing(error):
                     if error:
@@ -294,46 +299,62 @@ class MusicBot(commands.Cog):
                 del ffmpeg_source
                 gc.collect()
 
-            # Chance de tocar jingle
+
+
+        # ---------------- LOOP PRINCIPAL ----------------
+        play_next_is_pedido = True  # controla alternância
+
+        while vc.is_connected():
+            skip_jingle_next = False
+
+            # Se houver pedidos
+            if self.pedidos:
+                if play_next_is_pedido:
+                    pedido_intro = self.get_random_pedido_intro()
+                    if pedido_intro and await self.verify_and_cleanup_audio_file(pedido_intro):
+                        await _tocar(vc, pedido_intro, fade=False)
+
+                    path = self.pedidos.pop(0)
+                    await _tocar(vc, path, fade=True)
+                    skip_jingle_next = True
+                    play_next_is_pedido = False  # próxima será música da DJ
+                    continue
+                else:
+                    song = self.get_random_song()
+                    if not song:
+                        print("❌ - Nenhuma música encontrada na pasta.")
+                        await asyncio.sleep(60)
+                        continue
+                    path = os.path.join(self.music_folder, song)
+                    await _tocar(vc, path, fade=True)
+                    play_next_is_pedido = True
+                    # Chance de tocar jingle após música normal
+                    if random.random() < 0.2:
+                        jingle = self.get_random_jingle()
+                        if jingle and await self.verify_and_cleanup_audio_file(jingle):
+                            await _tocar(vc, jingle, fade=False)
+                    continue
+
+            # Se não houver pedidos, toca normalmente
+            if self.current_announcement:
+                path = self.current_announcement
+                self.current_announcement = False
+                await _tocar(vc, path, fade=False)
+                skip_jingle_next = True
+                continue
+
+            song = self.get_random_song()
+            if not song:
+                print("❌ - Nenhuma música encontrada na pasta.")
+                await asyncio.sleep(60)
+                continue
+            path = os.path.join(self.music_folder, song)
+            await _tocar(vc, path, fade=True)
+
             if not skip_jingle_next and random.random() < 0.2:
                 jingle = self.get_random_jingle()
                 if jingle and await self.verify_and_cleanup_audio_file(jingle):
-                    jingle_source = None
-                    jingle_ffmpeg = None
-                    done = asyncio.Event()
-                    try:
-                        print(f"🔊 - Tocando jingle: {os.path.basename(jingle)}")
-                        jingle_ffmpeg = discord.FFmpegPCMAudio(jingle, **self.ffmpeg_options)
-                        jingle_source = discord.PCMVolumeTransformer(jingle_ffmpeg, volume=0.5)
-
-                        def after_jingle(error):
-                            if error:
-                                print(f"❌ - Erro ao tocar jingle: {error}")
-                            done.set()
-
-                        vc.stop()
-                        vc.play(jingle_source, after=after_jingle)
-                        await done.wait()
-
-                    except Exception as e:
-                        print(f"❌ - Erro ao tocar jingle: {e}")
-                    finally:
-                        vc.stop()
-                        try:
-                            if jingle_source and hasattr(jingle_source, "cleanup"):
-                                jingle_source.cleanup()
-                            if jingle_ffmpeg and hasattr(jingle_ffmpeg, "cleanup"):
-                                jingle_ffmpeg.cleanup()
-                            if jingle_ffmpeg and hasattr(jingle_ffmpeg, "proc") and jingle_ffmpeg.proc:
-                                jingle_ffmpeg.proc.kill()
-                                jingle_ffmpeg.proc.wait()
-                        except Exception as e:
-                            print(f"🗑️ - Erro no cleanup do jingle: {e}")
-                        del jingle_source
-                        del jingle_ffmpeg
-                        gc.collect()
-
-
+                    await _tocar(vc, jingle, fade=False)
 
 
 
@@ -386,7 +407,7 @@ class MusicBot(commands.Cog):
     #Verifica se a música ainda está tocando e se o bot está conectado.
     @tasks.loop(minutes=1)
     async def check_music(self):
-        channel = self.channel
+        channel = getattr(self, "temp_channel", None) or self.client.get_channel(self.voice_channel_id)
         backoff_delay = 1  # começa com 1 segundo
 
         for attempt in range(5):  # tenta reconectar no máximo 5 vezes por checagem
@@ -409,6 +430,9 @@ class MusicBot(commands.Cog):
                     backoff_delay = min(backoff_delay * 2, 60)  # dobra até máximo de 60s
             else:
                 break  # já está conectado
+        # Se estava em canal temporário e desconectou, reseta para o canal original
+        if not (channel and channel.id == self.voice_channel_id):
+            self.temp_channel = None
 
         # Tenta reiniciar a música se estiver conectado e parado
         vc = discord.utils.get(self.client.voice_clients, guild=channel.guild)
@@ -545,7 +569,7 @@ class MusicBot(commands.Cog):
 
 #-----------------COMANDOS AQUI-------------------------
 #Inicia instancia e vincula com a classe
-    dj=app_commands.Group(name="musica",description="Comandos de gestão do sistema DJ Braixen.",allowed_installs=app_commands.AppInstallationType(guild=True,user=False),allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False))
+    dj=app_commands.Group(name="radio",description="Comandos de gestão do sistema DJ Braixen.",allowed_installs=app_commands.AppInstallationType(guild=True,user=False),allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False))
 
 
     @dj.command(name="verificar", description="🤖⠂Verifica todos os arquivos de música e remove os corrompidos.")
@@ -613,20 +637,19 @@ class MusicBot(commands.Cog):
 
         await interaction.response.defer(ephemeral=True)
 
-        # Verifica se já está conectado em algum VC
         vc_atual = discord.utils.get(self.client.voice_clients, guild=interaction.guild)
 
         try:
             if vc_atual and vc_atual.is_connected():
                 await vc_atual.disconnect(force=True)
 
-            # Conecta no novo canal
+            # Conecta no novo canal temporário
             novo_vc = await canal.connect()
+            self.temp_channel = canal  # <-- registra canal temporário
             self.status_msg = None
-            # Reinicia o player de música nesse canal
-            await interaction.followup.send( f"✅ - Bot movido temporariamente para **{canal.name}**.")
             await self.play_music(novo_vc)
-            
+
+            await interaction.followup.send( f"✅ - Bot movido temporariamente para **{canal.name}**.", ephemeral=True )
         except Exception as e:
             await interaction.followup.send( f"❌ - Não consegui mover para o canal {canal.mention}.\nErro: {e}" )
             print(f"🚨 - Falha ao mover bot para novo canal de voz verifique o erro {e}")
@@ -637,18 +660,23 @@ class MusicBot(commands.Cog):
 
 
 
-    @dj.command(name="tocar", description="🎶⠂Escolha uma música para tocar logo após a atual.")
+    @dj.command(name="pedido", description="🎶⠂Peça uma música para a dj tocar logo após a atual.")
     @app_commands.describe(música="Escolha a música que será tocada em seguida.")
     async def tocar_slash(self, interaction: discord.Interaction, música: str):
+        # Verifica se a DJ (bot) está no mesmo canal de voz
+        vc = getattr(self, "vc", None)  # vc atual do bot
+        if not vc or not vc.channel or vc.channel != interaction.user.voice.channel:
+            await interaction.response.send_message( "❌ - Você precisa estar no mesmo canal de voz que eu para pedir uma música.", ephemeral=True , delete_after = 20)
+            return
         path = os.path.join(self.music_folder, música)
 
         if not os.path.exists(path):
-            await interaction.response.send_message("❌ - Música não encontrada.", ephemeral=True)
+            await interaction.response.send_message("❌ - Música não encontrada.", ephemeral=True , delete_after = 20)
             return
 
         # define como a próxima música
-        self.current_announcement = path  
-        await interaction.response.send_message(f"✅ - **{música}** será tocada a seguir ~kyuu.", ephemeral=True)
+        self.pedidos.append(path)  # adiciona na fila
+        await interaction.response.send_message(f"✅ - **{música}** será tocada a seguir ~kyuu.", ephemeral=True , delete_after = 20)
 
     @tocar_slash.autocomplete('música')
     async def autocomplete_musicas(self, interaction: discord.Interaction, current: str):

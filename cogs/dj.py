@@ -2,7 +2,7 @@ import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess
 from discord.ext import commands , tasks
 from pathlib import Path
 from discord import app_commands
-from cogs.essential.host import status,restart
+from cogs.essential.host import status,restart , informação
 from dotenv import load_dotenv
 from functools import partial
 
@@ -30,6 +30,7 @@ class MusicBot(commands.Cog):
         self.client = client
         self.voice_channel_id = CHANNEL_ID  # ID do canal de voz.
         self.synced = False
+        self.limit_ram = False
         self.music_folder = os.path.join("musicas_repo", "musicas")  # Nova pasta de músicas
         self.announcement_folder = os.path.join("musicas_repo", "anuncios")  # Pasta de anúncios
         self.current_announcement = False   #ANUNCIO ATUAL
@@ -82,7 +83,6 @@ class MusicBot(commands.Cog):
     async def baixar_arquivos(self, tentativa=1):
         if tentativa > MAX_TENTATIVAS:
             print("❌ - Limite de tentativas atingido. Abortando download.")
-            #await self.reproduzir()
             return
 
         async with aiohttp.ClientSession() as session:
@@ -111,7 +111,7 @@ class MusicBot(commands.Cog):
                                     with open(caminho_arquivo, "wb") as f:
                                         f.write(await download_response.read())
                                     print(f"✅ - Baixado: {nome_arquivo}")
-                                    await asyncio.sleep(5)
+                                    await asyncio.sleep(2)
                                 else:
                                     print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
                                     print("🔁 - Reiniciando tentativa de download...")
@@ -123,7 +123,6 @@ class MusicBot(commands.Cog):
                         print("🔁 - Reiniciando tentativa de download...")
                         return await self.baixar_arquivos(tentativa + 1)
             print("✅ - Biblioteca de musicas sincronizada com Github\n\n")
-            #await self.reproduzir()
     
 
 
@@ -272,7 +271,7 @@ class MusicBot(commands.Cog):
 
                 source = discord.PCMVolumeTransformer(ffmpeg_source, volume=0.5)
                 if fade :
-                    await self.update_status(path, vc)
+                    await self.update_status(path, vc , duration)
 
                 def after_playing(error):
                     if error:
@@ -472,19 +471,38 @@ class MusicBot(commands.Cog):
 
 
     # LOOP DE ATUALIZAÇÃO DE STATUS
-    async def update_status(self, song, vc):
+    async def update_status(self, song, vc , duration):
         now = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo'))
         song = Path(song).stem
-        print(f"💿 - Tocando Agora: {song}")
+
+                # formata duração
+        if duration < 3600:  # menos de 1h → mm:ss
+            minutos, segundos = divmod(int(duration), 60)
+            tempo_total = f"{minutos:02d}:{segundos:02d}"
+        else:  # 1h ou mais → hh:mm:ss
+            horas, resto = divmod(int(duration), 3600)
+            minutos, segundos = divmod(resto, 60)
+            tempo_total = f"{horas}:{minutos:02d}:{segundos:02d}"
+        
+         # calcula timestamps
+        end_timestamp = int(datetime.datetime.now().timestamp()) + int(duration)            # agora + duração da música
+
+
+        print(f"💿 - Tocando Agora: {song} ({tempo_total})")
         await self.client.change_presence(activity=discord.CustomActivity(name=f"Ouvindo {song}"))
-        embed = discord.Embed(description=f"## 🎵 • Tocando agora\n\n**{song}**",color=0xFBC02D)  # amarelo estilo Braixen
-        embed.set_footer(text=f"{self.client.user.name} • Braixen's House • {now.hour:02d}:{now.minute:02d}")
+        
+        embed = discord.Embed(description=f"## 🎵 • Tocando agora\n\n**{song}**\n\n⏱️ Tempo total: `{tempo_total}`\n⏳ Termina: <t:{end_timestamp}:R>",color=0xFBC02D)  # amarelo estilo Braixen
+        embed.set_footer(text=f"{self.client.user.name} • {self.channel.guild.name} • {now.hour:02d}:{now.minute:02d}")
         embed.set_thumbnail(url=self.client.user.avatar.url)
 
         view = discord.ui.View(timeout=None)
         consultarmusica = discord.ui.Button(label="Músicas Tocadas",style=discord.ButtonStyle.blurple,emoji="🎵")
         view.add_item(item=consultarmusica)
         consultarmusica.callback = partial( self.musicas_tocadas )
+
+        totasmusica = discord.ui.Button(label="Todas as Músicas",style=discord.ButtonStyle.green,emoji="🎶")
+        view.add_item(item=totasmusica)
+        totasmusica.callback = partial( self.todas_musicas )
 
         try:
             if self.status_msg:
@@ -509,21 +527,31 @@ class MusicBot(commands.Cog):
     @tasks.loop(seconds=60)
     async def memory_check(self):
         try:
+            if self.limit_ram is False:
+                res_information , host = await informação(self.client.user.name)
+                if host == "squarecloud":
+                    total_ram = int(res_information['response']['ram'])
+                    self.limit_ram = total_ram - int(total_ram * 0.05)
+
+                elif host == "discloud":
+                    total_ram = int(res_information['apps']['ram'])
+                    self.limit_ram = total_ram - int(total_ram * 0.05)
+                else:
+                    return
+
             res_status, host = await status(self.client.user.name)
 
             if host == "squarecloud":
                 ram_str = res_status['response']['ram']
-                limit_ram = 210
             elif host == "discloud":
                 ram_str = res_status['apps']['memory'].split('/')[0]
-                limit_ram = 90
             else:
                 return  # host desconhecido, ignora
 
             ram_value = float(ram_str.replace("MB", "").strip())
             self._falhas_memoria = 0  # resetar contador se for bem-sucedido
 
-            if ram_value >= limit_ram:
+            if ram_value >= self.limit_ram:
                 print(f"🤖 - Uso de RAM alto! Reiniciando o app pela {host}...")
                 await restart(self.client.user.name)
 
@@ -561,6 +589,44 @@ class MusicBot(commands.Cog):
         # Manda o último bloco restante
         if bloco.strip():
             await interaction.followup.send(f"✅ - Músicas já tocadas:\n{bloco}", ephemeral=True)
+
+
+
+
+        # RETORNA AO USUARIO TODAS AS MUSICAS DISPONIVEIS
+    @commands.Cog.listener()
+    async def todas_musicas(self, interaction: discord.Interaction):
+        await interaction.response.defer(ephemeral=True)
+
+        try:
+            musicas = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
+        except Exception as e:
+            await interaction.followup.send(f"❌ - Erro ao listar músicas: {e}", ephemeral=True)
+            return
+
+        if not musicas:
+            await interaction.followup.send("Nenhuma música disponível no momento ~kyuu.", ephemeral=True)
+            return
+
+        # Monta lista completa formatada com contador
+        lista = [f"{i}. {song}" for i, song in enumerate(musicas, start=1)]
+
+        # Envia em blocos de até ~1800 caracteres
+        bloco = ""
+        for line in lista:
+            if len(bloco) + len(line) + 1 < 1800:
+                bloco += line + "\n"
+            else:
+                await interaction.followup.send(f"✅ - Músicas disponíveis:\n{bloco}", ephemeral=True)
+                bloco = line + "\n"
+
+        # Manda o último bloco restante
+        if bloco.strip():
+            await interaction.followup.send(f"✅ - Músicas disponíveis:\n{bloco}", ephemeral=True)
+
+
+
+
 
 
 
@@ -623,6 +689,12 @@ class MusicBot(commands.Cog):
         await self.musicas_tocadas(interaction)
 
 
+
+
+
+    @dj.command(name="disponíveis", description="📻⠂Mostra a lista completa de músicas disponíveis no bot.")
+    async def todas_musicas_slash(self, interaction: discord.Interaction):
+        await self.todas_musicas(interaction)
 
 
 

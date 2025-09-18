@@ -48,7 +48,7 @@ async def appname(nome):
         
         print(f"🤖 - Usando a hospedagem da {host}")
         if host == "squarecloud":
-            busca =  requests.get(f"https://api.squarecloud.app/v2/users/me", headers={"Authorization": square_token}, timeout= 10)
+            busca =  requests.get(f"https://api.squarecloud.app/v2/users/me", headers={"Authorization": square_token} )
             aplicativos = busca.json().get("response", {}).get("applications", [])
             # Filtrar e retornar apenas os IDs dos aplicativos com nome igual ou similar ao fornecido
             for app in aplicativos:
@@ -56,10 +56,10 @@ async def appname(nome):
                     appid = app["id"]
                     return app["id"]
         if host == "discloud":
-            busca =  requests.get(f"https://api.discloud.app/v2/user", headers={"api-token": discloud_token}, timeout= 10)
+            busca =  requests.get(f"https://api.discloud.app/v2/user", headers={"api-token": discloud_token} )
             aplicativos = busca.json().get("user", {}).get("apps", [])
             for app in aplicativos:
-                app =  requests.get(f"https://api.discloud.app/v2/app/{app}", headers={"api-token": discloud_token}, timeout= 10)
+                app =  requests.get(f"https://api.discloud.app/v2/app/{app}", headers={"api-token": discloud_token} )
                 if nome.lower() in app.json().get("apps", {}).get("name", "").lower():
                     appid = app.json().get("apps", {}).get("id", "")
                     return appid
@@ -71,10 +71,10 @@ async def informação(nome):
     retorno = await appname(nome)
     try:
         if host == "squarecloud":
-            res_information =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}", headers={"Authorization": square_token}, timeout= 10)
+            res_information =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}", headers={"Authorization": square_token})
             return res_information.json()  , host
         if host == "discloud":
-            res_information =  requests.get(f"https://api.discloud.app/v2/app/{retorno}", headers={"api-token": discloud_token}, timeout= 10)
+            res_information =  requests.get(f"https://api.discloud.app/v2/app/{retorno}", headers={"api-token": discloud_token})
             return res_information.json() , host
     except:
         return None , None
@@ -85,10 +85,10 @@ async def status(nome):
     retorno = await appname(nome)
     try:
         if host == "squarecloud":
-            res_status =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}/status", headers={"Authorization": square_token}, timeout= 10)
+            res_status =  requests.get(f"https://api.squarecloud.app/v2/apps/{retorno}/status", headers={"Authorization": square_token})
             return res_status.json()  , host
         if host == "discloud":
-            res_status =  requests.get(f"https://api.discloud.app/v2/app/{retorno}/status", headers={"api-token": discloud_token}, timeout= 10)
+            res_status =  requests.get(f"https://api.discloud.app/v2/app/{retorno}/status", headers={"api-token": discloud_token})
             return res_status.json()  , host
     except:
         return None , None
@@ -98,10 +98,10 @@ async def restart(nome):
     retorno = await appname(nome)
     try:
         if host == "squarecloud":
-            res_status =  requests.post(f"https://api.squarecloud.app/v2/apps/{retorno}/restart",headers={"Authorization": square_token}, timeout= 10)
+            res_status =  requests.post(f"https://api.squarecloud.app/v2/apps/{retorno}/restart",headers={"Authorization": square_token})
             return res_status.json() , host
         if host == "discloud":
-            res_status =  requests.put(f"https://api.discloud.app/v2/app/{retorno}/restart",headers={"api-token": discloud_token}, timeout= 10)
+            res_status =  requests.put(f"https://api.discloud.app/v2/app/{retorno}/restart",headers={"api-token": discloud_token})
             return res_status.json() , host
     except:
         return None , None

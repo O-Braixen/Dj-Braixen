@@ -63,6 +63,7 @@ Sempre renomeie o H como Maiusculo.
 🤖 discloud.config
 🤖 squarecloud.app
 
+Dica: Quando for usar uma das hosts delete o arquivo de config da outra para não dar conflitos
 
 **Lista dos comandos**
 
@@ -85,3 +86,12 @@ Sempre renomeie o H como Maiusculo.
 - Token do github para acesso a repositorio particular
 - Link do seu repositorio de musicas e anúncios, lembre-se que precisa obrigatoriamente ambas as pastas, mesmo que não tenha anúncios
 - ID do canal onde o bot irá se conectar
+
+
+---
+
+### 🗄️ Parceiro oficial Square Cloud
+
+<a href="https://squarecloud.app/">
+  <img src="https://cdn.squarecloud.app/assets/github-readme.png">
+</a>

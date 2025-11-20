@@ -118,6 +118,7 @@ async def botstatus(self,interaction):
 class owner(commands.Cog):
   def __init__(self, client: commands.Bot):
     self.client = client
+    self.limit_ram = False
 
 
 
@@ -131,9 +132,6 @@ class owner(commands.Cog):
   async def on_ready(self):
     print("🦊 - Modúlo Owner carregado.")
 
-    if not self.memory_check.is_running():
-      self.memory_check.start()  # Inicia a verificação de memoria.
-
     # Editando o Nome do bot para o padrão que está na host
     novo_nome = obter_nome_bot()
     if self.client.user.name != novo_nome:
@@ -142,6 +140,10 @@ class owner(commands.Cog):
         print(f"🤖 - Nome do bot foi alterado para {novo_nome}")
       except discord.HTTPException as e:
         print(f"❌ - Erro ao alterar nome do bot: {e}")
+
+    await asyncio.sleep(20)
+    if not self.memory_check.is_running():
+      self.memory_check.start()  # Inicia a verificação de memoria.
 
 
 

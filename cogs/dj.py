@@ -43,7 +43,6 @@ class MusicBot(commands.Cog):
         self.client = client
         self.voice_channel_id = CHANNEL_ID  # ID do canal de voz.
         self.synced = False
-        self.limit_ram = False
         self.music_folder = os.path.join("musicas_repo", "musicas")  # Nova pasta de músicas
         self.announcement_folder = os.path.join("musicas_repo", "anuncios")  # Pasta de anúncios
         self.current_announcement = False   #ANUNCIO ATUAL

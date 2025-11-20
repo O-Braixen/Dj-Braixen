@@ -8,6 +8,9 @@ from functools import partial
 
 
 
+
+
+
 load_dotenv()
 GIT_TOKEN = os.getenv("git_token")
 DONOID = int(os.getenv("DONO_ID")) #acessa e define o id do dono
@@ -18,6 +21,16 @@ PASTAS = ["anuncios","musicas"]
 HEADERS = {"Authorization": f"token {GIT_TOKEN}"}  # Substitua pelo seu token pessoal
 
 MAX_TENTATIVAS = 50
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -42,6 +55,10 @@ class MusicBot(commands.Cog):
         self.pedidos = []  # lista de pedidos
 
 
+
+
+
+
         # Carregar do arquivo se existir
         if os.path.exists(self.played_songs_file):
             try:
@@ -55,15 +72,19 @@ class MusicBot(commands.Cog):
                 json.dump([], f)
 
 
+
+
+
+
+
+
+
     
         # LIGANDO O BOT
     @commands.Cog.listener()
     async def on_ready(self):
         print("🎵 - Modúlo DJ carregado.")
-        #await asyncio.sleep(5)
-        if not self.memory_check.is_running():
-            self.memory_check.start()  # Inicia a verificação de memoria.
-        
+        await asyncio.sleep(5)        
         await self.reproduzir()
         await self.verificar_arquivos()
         
@@ -71,10 +92,27 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
       # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
     async def verificar_arquivos(self):
         print("🌐 - Iniciando verificação de arquivos.")
         await self.baixar_arquivos()
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -128,6 +166,19 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
         # FUNÇÂO DE REPRODUZIR MUSICA
     async def reproduzir(self):
         channel = self.client.get_channel(self.voice_channel_id)
@@ -153,6 +204,14 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
         #SALVAR O JSON COM AS MUSICAS JÀ TOCADAS
     def save_played_songs(self):
         try:
@@ -160,6 +219,15 @@ class MusicBot(commands.Cog):
                 json.dump(self.played_songs, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"⚠️ - Erro ao salvar played_songs.json: {e}")
+
+
+
+
+
+
+
+
+
 
 
 
@@ -185,6 +253,16 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+
         # PROCURA UM JINGLE ALEATORIA E SELECIONA
     def get_random_jingle(self):
         try:
@@ -196,6 +274,19 @@ class MusicBot(commands.Cog):
         except Exception as e:
             print(f"❌ - Erro ao listar jingles: {e}")
             return None
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -216,6 +307,15 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
         # PUXA UM ANUNCIO EM UM DETEMINADO HORARIO
     def get_hourly_announcement(self):
         current_hour = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo')).hour
@@ -223,6 +323,15 @@ class MusicBot(commands.Cog):
         filepath = os.path.join(self.announcement_folder, filename)
         return filepath if os.path.exists(filepath) else False
     
+
+
+
+
+
+
+
+
+
 
 
         # Pega duração da música
@@ -234,6 +343,15 @@ class MusicBot(commands.Cog):
         )
         out, _ = await proc.communicate()
         return float(out.decode().strip())
+
+
+
+
+
+
+
+
+
 
 
 
@@ -361,6 +479,16 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+
                
 
 
@@ -395,6 +523,19 @@ class MusicBot(commands.Cog):
         except Exception as e:
             print(f"⚠️ - Erro ao verificar arquivo com ffmpeg: {e}")
             return False
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -452,6 +593,21 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
         # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
     @tasks.loop(minutes=5)
     async def hourly_announcements(self):
@@ -462,6 +618,20 @@ class MusicBot(commands.Cog):
         await asyncio.sleep(seconds_until_next_hour)  # Espera até a próxima hora cheia
         # Só pega o anúncio no momento certo, sem repetir
         self.current_announcement = self.get_hourly_announcement()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -523,45 +693,12 @@ class MusicBot(commands.Cog):
 
 
 
-    # Monitorar Memoria no sistema DJ
-    @tasks.loop(seconds=60)
-    async def memory_check(self):
-        try:
-            if self.limit_ram is False:
-                res_information , host = await informação(self.client.user.name)
-                if host == "squarecloud":
-                    total_ram = int(res_information['response']['ram'])
-                    self.limit_ram = total_ram - int(total_ram * 0.05)
 
-                elif host == "discloud":
-                    total_ram = int(res_information['apps']['ram'])
-                    self.limit_ram = total_ram - int(total_ram * 0.05)
-                else:
-                    return
 
-            res_status, host = await status(self.client.user.name)
 
-            if host == "squarecloud":
-                ram_str = res_status['response']['ram']
-            elif host == "discloud":
-                ram_str = res_status['apps']['memory'].split('/')[0]
-            else:
-                return  # host desconhecido, ignora
 
-            ram_value = float(ram_str.replace("MB", "").strip())
-            self._falhas_memoria = 0  # resetar contador se for bem-sucedido
 
-            if ram_value >= self.limit_ram:
-                print(f"🤖 - Uso de RAM alto! Reiniciando o app pela {host}...")
-                await restart(self.client.user.name)
 
-        except Exception as e:
-            self._falhas_memoria += 1
-            print(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/300)...\nError: {e}")
-            if self._falhas_memoria >= 300:
-                print("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
-                await asyncio.sleep(10)
-                await restart(self.client.user.name)
 
 
 
@@ -589,6 +726,11 @@ class MusicBot(commands.Cog):
         # Manda o último bloco restante
         if bloco.strip():
             await interaction.followup.send(f"✅ - Músicas já tocadas:\n{bloco}", ephemeral=True)
+
+
+
+
+
 
 
 
@@ -633,9 +775,35 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #-----------------COMANDOS AQUI-------------------------
 #Inicia instancia e vincula com a classe
     dj=app_commands.Group(name="radio",description="Comandos de gestão do sistema DJ Braixen.",allowed_installs=app_commands.AppInstallationType(guild=True,user=False),allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False))
+
+
+
+
+
+
+
+
 
 
     @dj.command(name="verificar", description="🤖⠂Verifica todos os arquivos de música e remove os corrompidos.")
@@ -684,6 +852,13 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
     @dj.command(name="tocadas", description="📻⠂Mostra a lista completa de músicas já tocadas pelo bot.")
     async def musicas_tocadas_slash(self, interaction: discord.Interaction):
         await self.musicas_tocadas(interaction)
@@ -692,9 +867,28 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
     @dj.command(name="disponíveis", description="📻⠂Mostra a lista completa de músicas disponíveis no bot.")
     async def todas_musicas_slash(self, interaction: discord.Interaction):
         await self.todas_musicas(interaction)
+
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -732,6 +926,19 @@ class MusicBot(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
     @dj.command(name="pedido", description="🎶⠂Peça uma música para a dj tocar logo após a atual.")
     @app_commands.describe(música="Escolha a música que será tocada em seguida.")
     async def tocar_slash(self, interaction: discord.Interaction, música: str):
@@ -752,10 +959,25 @@ class MusicBot(commands.Cog):
         self.pedidos.append(path)  # adiciona na fila
         await interaction.response.send_message(f"✅ - **{música}** será tocada a seguir ~kyuu.", ephemeral=True , delete_after = 20)
 
+
+
+
+
+
     @tocar_slash.autocomplete('música')
     async def autocomplete_musicas(self, interaction: discord.Interaction, current: str):
         files = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
         return [ app_commands.Choice(name=f, value=f) for f in files if current.lower() in f.lower()][:25]  # Discord permite até 25 sugestões
+
+
+
+
+
+
+
+
+
+
 
 
 

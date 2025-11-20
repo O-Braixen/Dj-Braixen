@@ -1,14 +1,33 @@
 import discord,os,requests,json,datetime,pytz,asyncio
-from discord.ext import commands
+from discord.ext import commands , tasks
 from discord import app_commands
 from cogs.essential.host import informação,status,restart , obter_nome_bot
 from dotenv import load_dotenv
+
+
+
+
 
 
 #CARREGA E LE O ARQUIVO .env na raiz
 load_dotenv(os.path.join(os.path.dirname(__file__), '.env')) #load .env da raiz
 DONOID = int(os.getenv("DONO_ID")) #acessa e define o id do dono
 CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 #Função status
 async def botstatus(self,interaction):
@@ -80,14 +99,40 @@ async def botstatus(self,interaction):
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #----------------- CLASSE PRINCIPAL
 class owner(commands.Cog):
   def __init__(self, client: commands.Bot):
     self.client = client
 
+
+
+
+
+
+
+
+
   @commands.Cog.listener()
   async def on_ready(self):
     print("🦊 - Modúlo Owner carregado.")
+
+    if not self.memory_check.is_running():
+      self.memory_check.start()  # Inicia a verificação de memoria.
 
     # Editando o Nome do bot para o padrão que está na host
     novo_nome = obter_nome_bot()
@@ -97,6 +142,16 @@ class owner(commands.Cog):
         print(f"🤖 - Nome do bot foi alterado para {novo_nome}")
       except discord.HTTPException as e:
         print(f"❌ - Erro ao alterar nome do bot: {e}")
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -120,8 +175,83 @@ class owner(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
+  
+  # Monitorar Memoria no sistema DJ
+  @tasks.loop(seconds=60)
+  async def memory_check(self):
+    try:
+      if self.limit_ram is False:
+        res_information , host = await informação(self.client.user.name)
+        if host == "squarecloud":
+          total_ram = int(res_information['response']['ram'])
+          self.limit_ram = total_ram - int(total_ram * 0.05)
+
+        elif host == "discloud":
+          total_ram = int(res_information['apps']['ram'])
+          self.limit_ram = total_ram - int(total_ram * 0.05)
+
+      res_status, host = await status(self.client.user.name)
+
+      if host == "squarecloud":
+        ram_str = res_status['response']['ram']
+      elif host == "discloud":
+        ram_str = res_status['apps']['memory'].split('/')[0]
+
+      ram_value = float(ram_str.replace("MB", "").strip())
+      self._falhas_memoria = 0  # resetar contador se for bem-sucedido
+
+      if ram_value >= self.limit_ram:
+          print(f"🤖 - Uso de RAM alto!\nTotal de Ram usado:{ram_value} / {self.limit_ram}\nReiniciando o app pela {host}...")
+          await restart(self.client.user.name)
+
+    except Exception as e:
+        self._falhas_memoria += 1
+        print(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/300)...\nError: {e}")
+        if self._falhas_memoria >= 300:
+            print("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
+            await asyncio.sleep(10)
+            await restart(self.client.user.name)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     #GRUPO BOT 
   bot=app_commands.Group(name="dj",description="Comandos de gestão do sistema DJ Braixen.",allowed_installs=app_commands.AppInstallationType(guild=True,user=False),allowed_contexts=app_commands.AppCommandContext(guild=True, dm_channel=False, private_channel=False))
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -141,11 +271,30 @@ class owner(commands.Cog):
 
 
 
+
+
+
+
+
+
+
+
+
   #COMANDO STATUS BOT
   @bot.command(name="status",description='🤖⠂Exibe informações sobre o status de DJ Braixen.')
   async def botstatusslash(self, interaction: discord.Interaction):
     await botstatus(self,interaction)
   
+
+
+
+
+
+
+
+
+
+
 
 
   #COMANDO RESTART BOT NA HOST
@@ -160,6 +309,17 @@ class owner(commands.Cog):
     await interaction.response.send_message("Este comando é somente para o Dono do bot usar ~kyuu.")
    
     
+
+
+
+
+
+
+
+
+
+
+
 
 
 

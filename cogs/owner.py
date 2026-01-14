@@ -178,19 +178,19 @@ class owner(commands.Cog):
 
   
   # Monitorar Memoria no sistema DJ
-  @tasks.loop(seconds=60)
+  @tasks.loop(seconds=120)
   async def memory_check(self):
     try:
       if self.limit_ram is False:
         res_information , host = await informação(self.client.user.name)
         if host == "squarecloud":
           total_ram = int(res_information['response']['ram'])
-          self.limit_ram = total_ram - int(total_ram * 0.05)
+          self.limit_ram = total_ram - int(total_ram * 0.10)
 
         elif host == "discloud":
           total_ram = int(res_information['apps']['ram'])
-          self.limit_ram = total_ram - int(total_ram * 0.05)
-
+          self.limit_ram = total_ram - int(total_ram * 0.10)
+        print(f"🤖 - LIMITE DE RAM DEFINIDO PARA: {self.limit_ram} ")
       res_status, host = await status(self.client.user.name)
 
       if host == "squarecloud":
@@ -207,8 +207,8 @@ class owner(commands.Cog):
 
     except Exception as e:
         self._falhas_memoria += 1
-        print(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/300)...\nError: {e}")
-        if self._falhas_memoria >= 300:
+        print(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/50)...\nError: {e}")
+        if self._falhas_memoria >= 50:
             print("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
             await asyncio.sleep(10)
             await restart(self.client.user.name)

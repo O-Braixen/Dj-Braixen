@@ -122,45 +122,63 @@ class MusicBot(commands.Cog):
             print("❌ - Limite de tentativas atingido. Abortando download.")
             return
 
+        if GITHUB_API_URL_BASE is None or GIT_TOKEN is None:
+            print("❌ - SEM DADOS DE REPOSITORIO, VERIFIQUE O .ENV")
+            return
+
         async with aiohttp.ClientSession() as session:
-            if GITHUB_API_URL_BASE is None or GIT_TOKEN is None:
-                print("❌ - SEM DADOS DE REPOSITORIO, POR FAVOR VERIFIQUE O ARQUIVO .ENV")
-                return
             for pasta_remota in PASTAS:
                 pasta_local = os.path.join("musicas_repo", pasta_remota)
-                if not os.path.exists(pasta_local):
-                    os.makedirs(pasta_local)
-                
+                os.makedirs(pasta_local, exist_ok=True)
+
                 url = f"{GITHUB_API_URL_BASE}/{pasta_remota}"
                 async with session.get(url, headers=HEADERS) as response:
-                    if response.status == 200:
-                        conteudo = await response.json()
-                        for item in conteudo:
-                            nome_arquivo = item["name"]
-                            caminho_arquivo = os.path.join(pasta_local, nome_arquivo)
-
-                            if os.path.exists(caminho_arquivo):
-                                continue
-
-                            download_url = item["download_url"]
-                            async with session.get(download_url) as download_response:
-                                if download_response.status == 200:
-                                    with open(caminho_arquivo, "wb") as f:
-                                        f.write(await download_response.read())
-                                    print(f"✅ - Baixado: {nome_arquivo}")
-                                    await asyncio.sleep(2)
-                                else:
-                                    print(f"❌ - Erro ao baixar {nome_arquivo}: {download_response.status}")
-                                    print("🔁 - Reiniciando tentativa de download...")
-                                    
-                                    return await self.baixar_arquivos(tentativa + 1)
-                                
-                    else:
+                    if response.status != 200:
                         print(f"❌ - Erro ao acessar {url}: {response.status}")
-                        print("🔁 - Reiniciando tentativa de download...")
+                        print("🔁 - Tentando novamente...")
                         return await self.baixar_arquivos(tentativa + 1)
-            print("✅ - Biblioteca de musicas sincronizada com Github\n\n")
-    
+
+                    conteudo = await response.json()
+
+                    # Arquivos existentes no GitHub
+                    arquivos_repo = {
+                        item["name"]
+                        for item in conteudo
+                        if item["type"] == "file"
+                    }
+
+                    # Arquivos existentes localmente
+                    arquivos_locais = set(os.listdir(pasta_local))
+
+                    # 🧹 REMOVE arquivos locais que não existem mais no repo
+                    for arquivo in arquivos_locais - arquivos_repo:
+                        caminho = os.path.join(pasta_local, arquivo)
+                        if os.path.isfile(caminho):
+                            os.remove(caminho)
+                            print(f"🗑️ - Removido (não existe no repo): {arquivo}")
+
+                    # ⬇️ BAIXA arquivos novos
+                    for item in conteudo:
+                        if item["type"] != "file":
+                            continue
+
+                        nome_arquivo = item["name"]
+                        caminho_arquivo = os.path.join(pasta_local, nome_arquivo)
+
+                        if os.path.exists(caminho_arquivo):
+                            continue
+
+                        async with session.get(item["download_url"]) as download_response:
+                            if download_response.status == 200:
+                                with open(caminho_arquivo, "wb") as f:
+                                    f.write(await download_response.read())
+                                print(f"✅ - Baixado: {nome_arquivo}")
+                                await asyncio.sleep(0.4)
+                            else:
+                                print(f"❌ - Erro ao baixar {nome_arquivo}")
+                                return await self.baixar_arquivos(tentativa + 1)
+
+        print("✅ - Biblioteca de músicas 100% sincronizada com o GitHub\n")
 
 
 
@@ -544,7 +562,7 @@ class MusicBot(commands.Cog):
       
 
     #Verifica se a música ainda está tocando e se o bot está conectado.
-    @tasks.loop(minutes=1)
+    @tasks.loop(seconds=20)
     async def check_music(self):
         channel = getattr(self, "temp_channel", None) or self.client.get_channel(self.voice_channel_id)
         backoff_delay = 1  # começa com 1 segundo
@@ -676,7 +694,17 @@ class MusicBot(commands.Cog):
         try:
             if self.status_msg:
                 try:
-                    await self.status_msg.edit(embed=embed , view= view)
+                    ultima_msg = None
+                    async for msg in vc.channel.history(limit=1):
+                        ultima_msg = msg
+
+                    precisa_nova = ( not self.status_msg or not ultima_msg or ultima_msg.id != self.status_msg.id or ultima_msg.author.id != self.client.user.id)
+
+                    if precisa_nova:
+                        self.status_msg = await vc.channel.send(embed=embed, view=view)
+                    else:
+                        await self.status_msg.edit(embed=embed, view=view)
+                    #await self.status_msg.edit(embed=embed , view= view)
                 except discord.NotFound:
                     # Mensagem foi deletada, então envia uma nova
                     self.status_msg = await vc.channel.send(embed=embed , view= view)
@@ -896,25 +924,20 @@ class MusicBot(commands.Cog):
     @dj.command(name="mover", description="🔊⠂Move o bot para outro canal de voz temporariamente.")
     @app_commands.describe(canal="Canal de voz para onde mover o bot.")
     async def mover_canal_slash(self, interaction: discord.Interaction, canal: discord.VoiceChannel):
-        if interaction.user.id != DONOID:
-            await interaction.response.send_message("❌ - Apenas o dono do bot pode usar este comando ~kyuu.", ephemeral=True)
-            return
+        #if interaction.user.id != DONOID:
+        #    await interaction.response.send_message("❌ - Apenas o dono do bot pode usar este comando ~kyuu.", ephemeral=True)
+        #    return
 
         await interaction.response.defer(ephemeral=True)
-
         vc_atual = discord.utils.get(self.client.voice_clients, guild=interaction.guild)
-
         try:
-            if vc_atual and vc_atual.is_connected():
-                await vc_atual.disconnect(force=True)
-
-            # Conecta no novo canal temporário
-            novo_vc = await canal.connect()
+            # INDICA UM NOVO CANAL TEMPORARIO
             self.temp_channel = canal  # <-- registra canal temporário
             self.status_msg = None
-            await self.play_music(novo_vc)
+            if vc_atual and vc_atual.is_connected():
+                await vc_atual.disconnect(force=True)
+            await interaction.followup.send( f"✅ - Alteração realizada com sucesso, Novo canal temporário de reprodução é **{canal.name}**.", ephemeral=True )
 
-            await interaction.followup.send( f"✅ - Bot movido temporariamente para **{canal.name}**.", ephemeral=True )
         except Exception as e:
             await interaction.followup.send( f"❌ - Não consegui mover para o canal {canal.mention}.\nErro: {e}" )
             print(f"🚨 - Falha ao mover bot para novo canal de voz verifique o erro {e}")

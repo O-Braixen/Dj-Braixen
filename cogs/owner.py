@@ -178,18 +178,18 @@ class owner(commands.Cog):
 
   
   # Monitorar Memoria no sistema DJ
-  @tasks.loop(seconds=120)
+  @tasks.loop(seconds=25)
   async def memory_check(self):
     try:
       if self.limit_ram is False:
         res_information , host = await informação(self.client.user.name)
         if host == "squarecloud":
           total_ram = int(res_information['response']['ram'])
-          self.limit_ram = total_ram - int(total_ram * 0.10)
+          self.limit_ram = total_ram - int(total_ram * 0.05)
 
         elif host == "discloud":
           total_ram = int(res_information['apps']['ram'])
-          self.limit_ram = total_ram - int(total_ram * 0.10)
+          self.limit_ram = total_ram - int(total_ram * 0.05)
         print(f"🤖 - LIMITE DE RAM DEFINIDO PARA: {self.limit_ram} ")
       res_status, host = await status(self.client.user.name)
 

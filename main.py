@@ -39,16 +39,16 @@ class Client(commands.Bot):
 
     async def on_ready(self):
         await self.wait_until_ready()
-
+        print("\n" + "="*70)
         if not self.synced:
             await self.tree.sync()
             self.synced = True
             print(f"\n\n💻 - Comandos sincronizados: {self.synced}")
-        print(f"🐍 - Versão do python: {platform.python_version()}")
+        print(f"🐍 - Python: {platform.python_version()} | discord.py: {discord.__version__}")
         print(f"🦊 - O Bot {self.user} já está online e disponível")
-        print(f"💖 - Estou em {len(self.guilds)} comunidades com um total de {len(self.users)} membros")
+        print(f"💖 - Guildas: {len(self.guilds)} | Usuários: {len(self.users)}")
         print(f"⏰ - A hora no sistema é {datetime.datetime.now().strftime('%d/%m/%Y às %H:%M:%S')}\n\n")
-        
+        print("="*70 + "\n")
 
 
 

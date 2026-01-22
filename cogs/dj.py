@@ -49,7 +49,7 @@ class MusicBot(commands.Cog):
         self.ffmpeg_options = {            'before_options': ' -nostdin',  'options': '-vn -f s16le -b:a 192k'         }
         self.status_msg = None  # Para guardar a mensagem de status
         self._falhas_memoria = 0  # inicializa o contador
-        self.played_songs_file = "played_songs.json"
+        self.played_songs_file = os.path.join("musicas_repo", "played_songs.json")
         self.played_songs = []
         self.pedidos = []  # lista de pedidos
 
@@ -677,19 +677,22 @@ class MusicBot(commands.Cog):
 
         print(f"💿 - Tocando Agora: {song} ({tempo_total})")
         await self.client.change_presence(activity=discord.CustomActivity(name=f"Ouvindo {song}"))
-        
-        embed = discord.Embed(description=f"## 🎵 • Tocando agora\n\n**{song}**\n\n⏱️ Tempo total: `{tempo_total}`\n⏳ Termina: <t:{end_timestamp}:R>",color=0xFBC02D)  # amarelo estilo Braixen
+        embed = discord.Embed( description=f"## 🎶 • Tocando agora\n\nkyu~ sente essa vibe comigo 💛\n\n**{song}**\n\n⏱️ Duração total: `{tempo_total}`\n⏳ Termina: <t:{end_timestamp}:R>\n\nRelaxa… a Yoko tá no controle 😌🔥" , color=0xFBC02D)  # amarelo estilo Braixen
         embed.set_footer(text=f"{self.client.user.name} • {self.channel.guild.name} • {now.hour:02d}:{now.minute:02d}")
         embed.set_thumbnail(url=self.client.user.avatar.url)
 
         view = discord.ui.View(timeout=None)
-        consultarmusica = discord.ui.Button(label="Músicas Tocadas",style=discord.ButtonStyle.blurple,emoji="🎵")
+        consultarmusica = discord.ui.Button(label="Tocadas",style=discord.ButtonStyle.gray,emoji="🎵")
         view.add_item(item=consultarmusica)
         consultarmusica.callback = partial( self.musicas_tocadas )
 
-        totasmusica = discord.ui.Button(label="Todas as Músicas",style=discord.ButtonStyle.green,emoji="🎶")
+        totasmusica = discord.ui.Button(label="Todas",style=discord.ButtonStyle.gray,emoji="🎶")
         view.add_item(item=totasmusica)
         totasmusica.callback = partial( self.todas_musicas )
+
+        pedirmusica = discord.ui.Button(label="Pedir Música",style=discord.ButtonStyle.gray,emoji="🦊")
+        view.add_item(item=pedirmusica)
+        pedirmusica.callback = partial( self.embed_pedir_musica )
 
         try:
             if self.status_msg:
@@ -723,6 +726,40 @@ class MusicBot(commands.Cog):
 
 
 
+        #RETORNA AO USUARIO UM EMBED EXPLICANDO COMO FUNCIONA OS PEDIDOS DE MUSICAS
+    @commands.Cog.listener()
+    async def embed_pedir_musica(self, interaction: discord.Interaction):
+        embed = discord.Embed(
+            description=( "## 🎵 • Pedido de Música\n\n"
+                "Kyu~ quer escolher o próximo som da rádio? Então vem comigo que é facinho! 💛\n\n"
+                "**Como funciona:**\n"
+                "1️⃣ Use o comando `/radio pedido`\n"
+                "2️⃣ Digite o nome da música que você quer ouvir\n"
+                "3️⃣ Escolha uma opção da lista automática\n"
+                "4️⃣ Prontinho! A música entra na minha fila ✨\n\n"
+                "⚠️ **Atenção, kyu~**\n"
+                "• Só dá pra pedir músicas que já existem no meu sistema\n"
+                "• Nada de pedidos fora do catálogo, tá?\n"
+                "• Os pedidos funcionam **somente** via slash command\n\n"
+                "ℹ️ O autocomplete mostra apenas músicas disponíveis… assim eu não erro na escolha pra você 💿🔥"
+            ),
+            color=0xFBC02D
+        )
+
+        embed.set_footer(text="Pedidos apenas via slash command")
+        embed.set_thumbnail(url=self.client.user.avatar.url)
+
+        await interaction.response.send_message(embed=embed, ephemeral=True)
+
+
+
+
+
+
+
+
+
+
 
 
 
@@ -735,7 +772,7 @@ class MusicBot(commands.Cog):
         await interaction.response.defer(ephemeral=True)
 
         if not self.played_songs:
-            await interaction.followup.send("Nenhuma música foi tocada ainda ~kyuu.", ephemeral=True)
+            await interaction.followup.send("Ainda não rolou nenhuma música por aqui, kyu~ ✨ Que tal ser o primeiro a escolher o som?", ephemeral=True)
             return
 
         # Monta lista completa formatada com contador
@@ -747,12 +784,12 @@ class MusicBot(commands.Cog):
             if len(bloco) + len(line) + 1 < 1800:
                 bloco += line + "\n"
             else:
-                await interaction.followup.send(f"✅ - Músicas já tocadas:\n{bloco}", ephemeral=True)
+                await interaction.followup.send( f"✅ Kyu~ ♫ Aqui estão as músicas que já rolaram nessa jornada sonora:\n{bloco}",    ephemeral=True)
                 bloco = line + "\n"
 
         # Manda o último bloco restante
         if bloco.strip():
-            await interaction.followup.send(f"✅ - Músicas já tocadas:\n{bloco}", ephemeral=True)
+            await interaction.followup.send( f"✅ Kyu~ ♫ Aqui estão as músicas que já rolaram nessa jornada sonora:\n{bloco}",    ephemeral=True)
 
 
 
@@ -770,11 +807,11 @@ class MusicBot(commands.Cog):
         try:
             musicas = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
         except Exception as e:
-            await interaction.followup.send(f"❌ - Erro ao listar músicas: {e}", ephemeral=True)
+            await interaction.followup.send( f"❌ ┃ Kyu… opa! Algo deu errado enquanto eu tentava listar as músicas. Dá uma respirada aí que eu já tento de novo, tá? 💫\n\n**Detalhes:** {e}",ephemeral=True)
             return
 
         if not musicas:
-            await interaction.followup.send("Nenhuma música disponível no momento ~kyuu.", ephemeral=True)
+            await interaction.followup.send( "🎧 Kyu~ por enquanto não tem nenhuma música disponível pra tocar… mas fica por aqui, já já pinta coisa boa!",ephemeral=True)
             return
 
         # Monta lista completa formatada com contador
@@ -786,12 +823,12 @@ class MusicBot(commands.Cog):
             if len(bloco) + len(line) + 1 < 1800:
                 bloco += line + "\n"
             else:
-                await interaction.followup.send(f"✅ - Músicas disponíveis:\n{bloco}", ephemeral=True)
+                await interaction.followup.send(f"✅ Kyu! Olha só o que tá disponível pra tocar agora na Braixen's House:\n{bloco}",ephemeral=True)
                 bloco = line + "\n"
 
         # Manda o último bloco restante
         if bloco.strip():
-            await interaction.followup.send(f"✅ - Músicas disponíveis:\n{bloco}", ephemeral=True)
+            await interaction.followup.send(f"✅ Kyu! Olha só o que tá disponível pra tocar agora na Braixen's House:\n{bloco}",ephemeral=True)
 
 
 
@@ -836,10 +873,10 @@ class MusicBot(commands.Cog):
     @dj.command(name="verificar", description="🤖⠂Verifica todos os arquivos de música e remove os corrompidos.")
     async def verificar_musicas_slash(self, interaction: discord.Interaction):
         if interaction.user.id != DONOID:
-            await interaction.response.send_message("Este comando é somente para o Dono do bot usar ~kyuu.", ephemeral=True)
+            await interaction.response.send_message("Ei ei~ esse comando é exclusivo do dono do bot, viu? Kyu~ 💛",ephemeral=True)           
             return
 
-        await interaction.response.send_message("🔍 - Iniciando verificação de arquivos de áudio ~kyuu...")
+        await interaction.response.send_message("🔍 | Yoko na área! Começando a verificação dos arquivos de áudio… kyu~ ✨")
         status_msg = await interaction.original_response()
 
         total = 0
@@ -861,18 +898,20 @@ class MusicBot(commands.Cog):
                     arquivos_removidos.append(nome_arquivo)
 
                 if verificados % 20 == 0:
-                    await status_msg.edit(content=f"🔍 - Verificando arquivos... {verificados} analisados até agora ~kyuuu...")
+                    await status_msg.edit(content=f"🔍 | Conferindo tudinho com atenção… {verificados} arquivos analisados até agora, kyuuu~ 👀")
 
         if removidos > 0:
             lista_formatada = "\n".join(f"- {nome}" for nome in arquivos_removidos)
             conteudo_final = (
-                f"✅ - Verificação concluída.\n"
-                f"{total} arquivos analisados, {removidos} removidos.\n\n"
-                f"🗑️ - Arquivos removidos:\n{lista_formatada}"
+                f"✅ | Prontinho~ verificação concluída, kyu! ✨\n"
+                f"📊 {total} arquivos analisados, {removidos} removidos pra manter tudo organizado.\n\n"
+                f"🗑️ | Esses aqui precisaram sair:\n{lista_formatada}"
             )
         else:
-            conteudo_final = f"✅ - Verificação concluída. {total} arquivos analisados, nenhum removido ~kyuu."
-
+            conteudo_final = (
+                    f"✅ | Tudo certo por aqui~! {total} arquivos analisados "
+                    f"e nenhum precisou ser removido, kyu~ 💛"
+                )
         await status_msg.edit(content=conteudo_final)
 
 
@@ -925,7 +964,7 @@ class MusicBot(commands.Cog):
     @app_commands.describe(canal="Canal de voz para onde mover o bot.")
     async def mover_canal_slash(self, interaction: discord.Interaction, canal: discord.VoiceChannel):
         #if interaction.user.id != DONOID:
-        #    await interaction.response.send_message("❌ - Apenas o dono do bot pode usar este comando ~kyuu.", ephemeral=True)
+        #    await interaction.response.send_message("Ei ei~ esse comando é exclusivo do dono do bot, viu? Kyu~ 💛",ephemeral=True)           
         #    return
 
         await interaction.response.defer(ephemeral=True)
@@ -936,11 +975,11 @@ class MusicBot(commands.Cog):
             self.status_msg = None
             if vc_atual and vc_atual.is_connected():
                 await vc_atual.disconnect(force=True)
-            await interaction.followup.send( f"✅ - Alteração realizada com sucesso, Novo canal temporário de reprodução é **{canal.name}**.", ephemeral=True )
+            await interaction.followup.send( f"🎧 Kyu~ prontinho! A alteração foi feita com sucesso 💖 Agora o canal temporário de reprodução é **{canal.name}**!" )
 
         except Exception as e:
-            await interaction.followup.send( f"❌ - Não consegui mover para o canal {canal.mention}.\nErro: {e}" )
-            print(f"🚨 - Falha ao mover bot para novo canal de voz verifique o erro {e}")
+            await interaction.followup.send( f"🎧 Kyu… deu um errinho aqui 😿 Não consegui me mover para o canal {canal.mention}. Tenta de novo em alguns instantes, tá?" )
+            print(f"🚨 Falha ao mover o bot para o canal de voz: {e}")
 
 
 
@@ -969,17 +1008,18 @@ class MusicBot(commands.Cog):
         vc_atual = discord.utils.get(self.client.voice_clients, guild=interaction.guild)
 
         if not vc_atual or not vc_atual.channel or interaction.user.voice is None or vc_atual.channel != interaction.user.voice.channel:
-            await interaction.response.send_message( "❌ - Você precisa estar no mesmo canal de voz que eu para pedir uma música.", ephemeral=True , delete_after = 20)
+            await interaction.response.send_message( "🎧 Ei, ei~ kyu! Você precisa estar no mesmo canal de voz que eu pra fazer um pedido, viu?", ephemeral=True , delete_after = 20)
             return
         path = os.path.join(self.music_folder, música)
 
         if not os.path.exists(path):
-            await interaction.response.send_message("❌ - Música não encontrada.", ephemeral=True , delete_after = 20)
+            await interaction.response.send_message( "🎧 Hmm~ kyu… procurei direitinho, mas essa música não tá no meu sistema. Que tal tentar outra pra gente curtir juntinhos?", ephemeral=True , delete_after = 20)
             return
 
         # define como a próxima música
         self.pedidos.append(path)  # adiciona na fila
-        await interaction.response.send_message(f"✅ - **{música}** será tocada a seguir ~kyuu.", ephemeral=True , delete_after = 20)
+        await interaction.response.send_message(f"🎶 Pedido aceito~ kyu! **{música}** já já entra no ar pra você aproveitar.", ephemeral=True , delete_after = 20)
+
 
 
 

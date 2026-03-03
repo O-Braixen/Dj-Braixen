@@ -43,6 +43,7 @@ class MusicBot(commands.Cog):
         self.client = client
         self.voice_channel_id = CHANNEL_ID  # ID do canal de voz.
         self.synced = False
+        os.makedirs("musicas_repo", exist_ok=True)
         self.music_folder = os.path.join("musicas_repo", "musicas")  # Nova pasta de músicas
         self.announcement_folder = os.path.join("musicas_repo", "anuncios")  # Pasta de anúncios
         self.current_announcement = False   #ANUNCIO ATUAL
@@ -572,7 +573,9 @@ class MusicBot(commands.Cog):
 
             if not vc or not vc.is_connected():
                 try:
-                    vc = await channel.connect()
+                    vc = channel.guild.voice_client
+                    if not vc:
+                        vc = await channel.connect(reconnect=True)
                     await self.play_music(vc)
                     print(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
                     break  # reconectado com sucesso, sai do loop
@@ -974,7 +977,8 @@ class MusicBot(commands.Cog):
             self.temp_channel = canal  # <-- registra canal temporário
             self.status_msg = None
             if vc_atual and vc_atual.is_connected():
-                await vc_atual.disconnect(force=True)
+                await vc_atual.disconnect()
+                await asyncio.sleep(2)
             await interaction.followup.send( f"🎧 Kyu~ prontinho! A alteração foi feita com sucesso 💖 Agora o canal temporário de reprodução é **{canal.name}**!" )
 
         except Exception as e:

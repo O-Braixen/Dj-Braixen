@@ -30,60 +30,72 @@ CHANNEL_ID = int(os.getenv("RADIO_CHANNEL_ID"))
 
 
 #Função status
-async def botstatus(self,interaction):
+async def botstatus(self, interaction: discord.Interaction):
     await interaction.response.defer()
-    fuso = pytz.timezone('America/Sao_Paulo')
+    fuso = pytz.timezone("America/Sao_Paulo")
     now = datetime.datetime.now().astimezone(fuso)
+
     try:
-      res_information , host = await informação(self.client.user.name)
-      res_status, host = await status(self.client.user.name)
-          
+        res_information, host = await informação(self.client.user.name)
+        res_status, host = await status(self.client.user.name)
+        ambiente = "Produção"
+        # ==========================================
+        # SQUARECLOUD
+        if host == "squarecloud":
+            descricao = (
+                f"## 🦊┃Informações do {self.client.user.name}\n"
+                f"{res_information['response']['desc'] or 'Sem descrição'}\n\n"
 
-      if host == "squarecloud":
-        resposta = discord.Embed(
-                colour=discord.Color.yellow(),
-                title=f"🦊┃Informações do {self.client.user.name}",
-                description= res_information['response']['desc'] if res_information['response']['desc'] else "Sem Descrição"
+                f"### 🖥️┃Hospedagem SquareCloud\n"
+                f"**🗄️┃Cluster:** `{res_information['response']['cluster']}`\n"
+                f"**👨‍💻┃Linguagem:** `{res_information['response']['language']}`\n"
+                f"**📊┃RAM:** `{res_status['response']['ram']} / {res_information['response']['ram']} MB`\n"
+                f"**🌡️┃CPU:** `{res_status['response']['cpu']}`\n"
+                f"**🌐┃Rede:** `{res_status['response']['network']['total']}`\n"
+                f"**🕐┃Uptime:** <t:{round(res_status['response']['uptime']/1000)}:R>\n\n"
+
+                f"### 🤖┃Bot\n"
+                f"**🏓┃Ping:** `{round(self.client.latency * 1000)}ms`\n"
+                f"**🔮┃Menção:** <@{self.client.user.id}>\n"
+                f"**🆔┃Bot ID:** `{self.client.user.id}`\n"
+                f"**🦊┃Dono:** <@{DONOID}>\n"
+                f"**🕐┃Hora Sistema:** `{now.strftime('%d/%m/%y - %H:%M')}`\n"
+                f"**🍀┃Ambiente:** `{ambiente}`"
             )
-        resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
-        resposta.add_field(name="🖥️⠂squarecloud", value=f"```{res_information['response']['cluster']}```", inline=True)
-        resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['response']['language']}```", inline=True)
-        resposta.add_field(name="🦊⠂Dono", value=f"<@{DONOID}>", inline=True)
-        resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['response']['ram'])} / {res_information['response']['ram']} MB```", inline=True)
-        resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['response']['cpu']}```", inline=True)
-        resposta.add_field(name="🕐⠂Uptime", value=f"<t:{round(res_status['response']['uptime']/1000)}:R>", inline=True)
-        resposta.add_field(name="🌐⠂Rede", value=f"```{res_status['response']['network']['total']}```", inline=True)
-        resposta.add_field(name="🏓⠂Ping", value=f"```{round(self.client.latency * 1000)}ms```", inline=True)
-        resposta.add_field(name="🔮⠂Menção", value=f"<@{self.client.user.id}>", inline=True)
-        resposta.add_field(name="🕐⠂Hora Sistema", value=f"```{now.strftime('%d/%m/%y - %H:%M')}```", inline=True)
-        resposta.add_field(name="🆔⠂Bot ID", value=f"```{self.client.user.id}```", inline=True)
-        resposta.add_field(name="🍀⠂Ambiente", value=f"```Produção```", inline=True)
 
-      if host == "discloud":
-        resposta = discord.Embed(
-                colour=discord.Color.yellow(),
-                title=f"🦊┃Informações do {self.client.user.name}",
-                description=f"🖥️⠂Discloud - CLUSTER {res_information['apps']['clusterName']}"
+        # ==========================================
+        # DISCLOUD
+        else:
+            descricao = (
+                f"## 🦊┃Informações do {self.client.user.name}\n"
+                f"Hospedado via Discloud\n\n"
+
+                f"### 🖥️┃Hospedagem Discloud\n"
+                f"**🗄️┃Cluster:** `{res_information['apps']['clusterName']}`\n"
+                f"**👨‍💻┃Linguagem:** `{res_information['apps']['lang']}`\n"
+                f"**📊┃RAM:** `{res_status['apps']['memory']}`\n"
+                f"**🗄️┃Armazenamento:** `{res_status['apps']['ssd']}`\n"
+                f"**🌡️┃CPU:** `{res_status['apps']['cpu']}`\n"
+                f"**🌐┃Rede:** `⬇️ {res_status['apps']['netIO']['down']} / ⬆️ {res_status['apps']['netIO']['up']}`\n"
+                f"**🕐┃Uptime:** `{res_status['apps']['last_restart']}`\n\n"
+
+                f"### 🤖┃Bot\n"
+                f"**🏓┃Ping:** `{round(self.client.latency * 1000)}ms`\n"
+                f"**🔮┃Menção:** <@{self.client.user.id}>\n"
+                f"**🆔┃Bot ID:** `{self.client.user.id}`\n"
+                f"**🦊┃Dono:** <@{DONOID}>\n"
+                f"**🕐┃Hora Sistema:** `{now.strftime('%d/%m/%y - %H:%M')}`\n"
+                f"**🍀┃Ambiente:** `{ambiente}`"
             )
-        resposta.set_thumbnail(url=f"{self.client.user.avatar.url}")
-        resposta.add_field(name="👨‍💻⠂Linguagem", value=f"```{res_information['apps']['lang']}```", inline=True)
-        resposta.add_field(name="🦊⠂Dono", value=f"<@{DONOID}>", inline=True)
-        resposta.add_field(name="📊⠂Ram", value=f"```{(res_status['apps']['memory'])}```", inline=True)
-        resposta.add_field(name="🗄️⠂Armazenamento", value=f"```{res_status['apps']['ssd']}```", inline=True)
-        resposta.add_field(name="🌡⠂CPU", value=f"```{res_status['apps']['cpu']}```", inline=True)
-        resposta.add_field(name="🕐⠂Uptime", value=f"{res_status['apps']['last_restart']}", inline=True)
-        resposta.add_field(name="🌐⠂Rede", value=f"```⬇️ {res_status['apps']['netIO']['down']}/⬆️ {res_status['apps']['netIO']['up']}```", inline=True)
-        resposta.add_field(name="🏓⠂Ping", value=f"```{round(self.client.latency * 1000)}ms```", inline=True)
-        resposta.add_field(name="🔮⠂Menção", value=f"<@{self.client.user.id}>", inline=True)
-        resposta.add_field(name="🕐⠂Hora Sistema", value=f"```{now.strftime('%d/%m/%y - %H:%M')}```", inline=True)
-        resposta.add_field(name="🆔⠂Bot ID", value=f"```{self.client.user.id}```", inline=True)
-        resposta.add_field(name="🍀⠂Ambiente", value=f"```Produção```", inline=True)
 
-      await interaction.followup.send(embed=resposta)
+        resposta = discord.Embed( colour=discord.Color.yellow(), description=descricao )
+        resposta.set_thumbnail(url=self.client.user.avatar.url)
+        resposta.set_footer( text=f"{self.client.user.name} • Sistema de Status" )
+        await interaction.followup.send(embed=resposta)
 
     except Exception as e:
-      await interaction.followup.send("<:BH_Braix_Shocked:1154338787757932585>┃ A API da Hospedagem não me respondeu, ou o meu dono não configurou ela corretamente no meu sistema...\n<:BH_Braix:1154338509839143023>┃ Confira o erro gerado: {}".format(e))
-      print(e)
+        await interaction.followup.send(f"<:BH_Braix_Shocked:1154338787757932585>┃ A API da hospedagem não respondeu corretamente...\n"f"```py\n{e}\n```")
+        print(e)
 
 
 

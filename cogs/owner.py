@@ -1,8 +1,10 @@
-import discord,os,requests,json,datetime,pytz,asyncio
+import discord,os,requests,json,datetime,pytz,asyncio,logging
 from discord.ext import commands , tasks
 from discord import app_commands
 from cogs.essential.host import informação,status,restart , obter_nome_bot
 from dotenv import load_dotenv
+
+logger = logging.getLogger('djbraixen')
 
 
 
@@ -95,7 +97,7 @@ async def botstatus(self, interaction: discord.Interaction):
 
     except Exception as e:
         await interaction.followup.send(f"<:BH_Braix_Shocked:1154338787757932585>┃ A API da hospedagem não respondeu corretamente...\n"f"```py\n{e}\n```")
-        print(e)
+        logger.error(f"Erro em botstatus: {e}", exc_info=True)
 
 
 
@@ -132,16 +134,16 @@ class owner(commands.Cog):
 
   @commands.Cog.listener()
   async def on_ready(self):
-    print("🦊 - Modúlo Owner carregado.")
+    logger.info("🦊 - Modúlo Owner carregado.")
 
     # Editando o Nome do bot para o padrão que está na host
     novo_nome = obter_nome_bot()
     if self.client.user.name != novo_nome:
       try:
         await self.client.user.edit(username=novo_nome)
-        print(f"🤖 - Nome do bot foi alterado para {novo_nome}")
+        logger.info(f"🤖 - Nome do bot foi alterado para {novo_nome}")
       except discord.HTTPException as e:
-        print(f"❌ - Erro ao alterar nome do bot: {e}")
+        logger.error(f"❌ - Erro ao alterar nome do bot: {e}")
 
     await asyncio.sleep(20)
     if not self.memory_check.is_running():
@@ -202,7 +204,7 @@ class owner(commands.Cog):
         elif host == "discloud":
           total_ram = int(res_information['apps']['ram'])
           self.limit_ram = total_ram - int(total_ram * 0.05)
-        print(f"🤖 - LIMITE DE RAM DEFINIDO PARA: {self.limit_ram} ")
+        logger.info(f"🤖 - LIMITE DE RAM DEFINIDO PARA: {self.limit_ram} ")
       res_status, host = await status(self.client.user.name)
 
       if host == "squarecloud":
@@ -214,14 +216,14 @@ class owner(commands.Cog):
       self._falhas_memoria = 0  # resetar contador se for bem-sucedido
 
       if ram_value >= self.limit_ram:
-          print(f"🤖 - Uso de RAM alto!\nTotal de Ram usado:{ram_value} / {self.limit_ram}\nReiniciando o app pela {host}...")
+          logger.warning(f"🤖 - Uso de RAM alto!\nTotal de Ram usado:{ram_value} / {self.limit_ram}\nReiniciando o app pela {host}...")
           await restart(self.client.user.name)
 
     except Exception as e:
         self._falhas_memoria += 1
-        print(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/50)...\nError: {e}")
+        logger.error(f"🤖 - falha ao checar memoria na hospedagem ({self._falhas_memoria}/50)...\nError: {e}")
         if self._falhas_memoria >= 50:
-            print("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
+            logger.critical("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
             await asyncio.sleep(10)
             await restart(self.client.user.name)
 

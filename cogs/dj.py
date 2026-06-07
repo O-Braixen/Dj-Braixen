@@ -1,10 +1,12 @@
-import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess , json, ctypes 
+import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess , json, ctypes, logging
 from discord.ext import commands , tasks
 from pathlib import Path
 from discord import app_commands
 from cogs.essential.host import status,restart , informação
 from dotenv import load_dotenv
 from functools import partial
+
+logger = logging.getLogger('djbraixen')
 
 
 
@@ -71,7 +73,7 @@ class MusicBot(commands.Cog):
                 with open(self.played_songs_file, "r", encoding="utf-8") as f:
                     self.played_songs = json.load(f)
             except Exception as e:
-                print(f"⚠️ - Erro ao carregar played_songs.json: {e}")
+                logger.warning(f"⚠️ - Erro ao carregar played_songs.json: {e}")
         else:
             # Cria o arquivo vazio
             with open(self.played_songs_file, "w", encoding="utf-8") as f:
@@ -158,9 +160,9 @@ class MusicBot(commands.Cog):
             for k in chaves_para_remover:
                 del self.songs_cache[k]
 
-            print(f"💾 - Cache de Músicas Atualizado: {len(self.available_songs)} músicas, {len(self.available_jingles)} jingles, {len(self.available_intros)} intros, {len(self.available_announcements)} anúncios horários.")
+            logger.info(f"💾 - Cache de Músicas Atualizado: {len(self.available_songs)} músicas, {len(self.available_jingles)} jingles, {len(self.available_intros)} intros, {len(self.available_announcements)} anúncios horários.")
         except Exception as e:
-            print(f"⚠️ - Erro ao atualizar cache de músicas: {e}")
+            logger.error(f"⚠️ - Erro ao atualizar cache de músicas: {e}")
 
 
 
@@ -174,7 +176,7 @@ class MusicBot(commands.Cog):
         # LIGANDO O BOT
     @commands.Cog.listener()
     async def on_ready(self):
-        print("🎵 - Modúlo DJ carregado.")
+        logger.info("🎵 - Modúlo DJ carregado.")
         await asyncio.sleep(5)        
         await self.reproduzir()
         await self.verificar_arquivos()
@@ -191,7 +193,7 @@ class MusicBot(commands.Cog):
 
       # AGENDA A VERIFICAÇÃO PARA RODAR O ANUNCIO
     async def verificar_arquivos(self):
-        print("🌐 - Iniciando verificação de arquivos.")
+        logger.info("🌐 - Iniciando verificação de arquivos.")
         await self.baixar_arquivos()
 
 
@@ -211,10 +213,10 @@ class MusicBot(commands.Cog):
     # FUNÇÃO PARA BAIXAR OS ARQUIVOS DO REPOSITÓRIO
     async def baixar_arquivos(self, tentativa=1):
         if tentativa > MAX_TENTATIVAS:
-            print("❌ - Limite de tentativas atingido. Abortando download.")
+            logger.error("❌ - Limite de tentativas atingido. Abortando download.")
             return
         if GITHUB_API_URL_BASE is None or GIT_TOKEN is None:
-            print("❌ - SEM DADOS DE REPOSITORIO, VERIFIQUE O .ENV")
+            logger.error("❌ - SEM DADOS DE REPOSITORIO, VERIFIQUE O .ENV")
             return
         
         # Semáforo para limitar downloads simultâneos e não sobrecarregar a RAM/Rede
@@ -232,12 +234,12 @@ class MusicBot(commands.Cog):
                             conteudo_arquivo = await download_response.read()
                             with open(caminho_arquivo, "wb") as f:
                                 f.write(conteudo_arquivo)
-                            print(f"✅ - Baixado: {nome_arquivo}")
+                            logger.info(f"✅ - Baixado: {nome_arquivo}")
                             await asyncio.sleep(0.2)  # Pequeno delay para evitar taxa limite
                         else:
-                            print(f"❌ - Erro ao baixar {nome_arquivo}: Status {download_response.status}")
+                            logger.error(f"❌ - Erro ao baixar {nome_arquivo}: Status {download_response.status}")
                 except Exception as e:
-                    print(f"❌ - Exceção ao baixar {nome_arquivo}: {e}")
+                    logger.error(f"❌ - Exceção ao baixar {nome_arquivo}: {e}")
         async with aiohttp.ClientSession() as session:
             for pasta_remota in PASTAS:
                 pasta_local = os.path.join("musicas_repo", pasta_remota)
@@ -245,8 +247,8 @@ class MusicBot(commands.Cog):
                 url = f"{GITHUB_API_URL_BASE}/{pasta_remota}"
                 async with session.get(url, headers=HEADERS) as response:
                     if response.status != 200:
-                        print(f"❌ - Erro ao acessar {url}: {response.status}")
-                        print("🔁 - Tentando novamente...")
+                        logger.error(f"❌ - Erro ao acessar {url}: {response.status}")
+                        logger.info("🔁 - Tentando novamente...")
                         return await self.baixar_arquivos(tentativa + 1)
                     conteudo = await response.json()
                     # Arquivos existentes no GitHub
@@ -262,7 +264,7 @@ class MusicBot(commands.Cog):
                         caminho = os.path.join(pasta_local, arquivo)
                         if os.path.isfile(caminho):
                             os.remove(caminho)
-                            print(f"🗑️ - Removido (não existe no repo): {arquivo}")
+                            logger.info(f"🗑️ - Removido (não existe no repo): {arquivo}")
                     # ⬇️ BAIXA arquivos novos
                     tarefas = []
                     for item in conteudo:
@@ -273,25 +275,9 @@ class MusicBot(commands.Cog):
                     if tarefas:
                         await asyncio.gather(*tarefas)
         self.atualizar_cache_musicas()
-        print("✅ - Biblioteca de músicas 100% sincronizada com o GitHub\n")
+        logger.info("✅ - Biblioteca de músicas 100% sincronizada com o GitHub")
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-        # FUNÇÂO DE REPRODUZIR MUSICA
+    # FUNÇÂO DE REPRODUZIR MUSICA
     async def reproduzir(self):
         channel = self.client.get_channel(self.voice_channel_id)
         if channel:
@@ -301,7 +287,7 @@ class MusicBot(commands.Cog):
                         await channel.purge(limit=100)
                         await asyncio.sleep(1)  # Evita ser bloqueado por flood
                 except Exception as e:
-                    print(f"❌ - Erro ao limpar mensagens do canal: {e}")
+                    logger.error(f"❌ - Erro ao limpar mensagens do canal: {e}")
 
                 if not self.check_music.is_running():
                     self.channel = channel
@@ -310,11 +296,9 @@ class MusicBot(commands.Cog):
                     self.hourly_announcements.start()  # Inicia sistema de anúncios
                 
             except Exception as e:
-                print(f"❌ - ({self.client.user}) Erro ao conectar ao canal de voz: {e}")
+                logger.error(f"❌ - ({self.client.user}) Erro ao conectar ao canal de voz: {e}")
         else:
-            print(f"❌ - ({self.client.user}) Canal de voz não encontrado.")
-
-
+            logger.error(f"❌ - ({self.client.user}) Canal de voz não encontrado.")
 
 
 
@@ -330,7 +314,7 @@ class MusicBot(commands.Cog):
             with open(self.played_songs_file, "w", encoding="utf-8") as f:
                 json.dump(self.played_songs, f, ensure_ascii=False, indent=2)
         except Exception as e:
-            print(f"⚠️ - Erro ao salvar played_songs.json: {e}")
+            logger.warning(f"⚠️ - Erro ao salvar played_songs.json: {e}")
 
 
 
@@ -361,7 +345,7 @@ class MusicBot(commands.Cog):
             return song
 
         except Exception as e:
-            print(f"❌ - Erro ao obter música aleatória do cache: {e}")
+            logger.error(f"❌ - Erro ao obter música aleatória do cache: {e}")
             return None
 
         # PROCURA UM JINGLE ALEATORIO E SELECIONA
@@ -369,7 +353,7 @@ class MusicBot(commands.Cog):
         try:
             return random.choice(self.available_jingles) if self.available_jingles else None
         except Exception as e:
-            print(f"❌ - Erro ao obter jingle aleatório do cache: {e}")
+            logger.error(f"❌ - Erro ao obter jingle aleatório do cache: {e}")
             return None
 
         # PROCURA UMA INTRO DE PEDIDO ALEATÓRIA
@@ -377,9 +361,8 @@ class MusicBot(commands.Cog):
         try:
             return random.choice(self.available_intros) if self.available_intros else None
         except Exception as e:
-            print(f"❌ - Erro ao obter intro de pedido aleatório do cache: {e}")
+            logger.error(f"❌ - Erro ao obter intro de pedido aleatório do cache: {e}")
             return None
-
 
 
 
@@ -432,7 +415,7 @@ class MusicBot(commands.Cog):
                     await proc.wait()
                 except Exception:
                     pass
-                print(f"⚠️ - Timeout ao obter duração da música com ffprobe: {path}")
+                logger.warning(f"⚠️ - Timeout ao obter duração da música com ffprobe: {path}")
                 duracao = 180.0
             except Exception:
                 duracao = 180.0
@@ -442,7 +425,7 @@ class MusicBot(commands.Cog):
             self.songs_cache[path]["duracao"] = duracao
             return duracao
         except Exception as e:
-            print(f"❌ - Erro ao obter duração da música com ffprobe: {e}")
+            logger.error(f"❌ - Erro ao obter duração da música com ffprobe: {e}")
             return 180.0  # Duração fallback padrão (3 minutos)
 
 
@@ -494,7 +477,7 @@ class MusicBot(commands.Cog):
 
                 def after_playing(error):
                     if error:
-                        print(f"❌ - Erro ao reproduzir: {error}")
+                        logger.error(f"❌ - Erro ao reproduzir: {error}")
                     done.set()
 
                 vc.play(source, after=after_playing)
@@ -515,7 +498,7 @@ class MusicBot(commands.Cog):
                         except Exception:
                             pass
                 except Exception as e:
-                    print(f"🗑️ - Erro no cleanup: {e}")
+                    logger.error(f"🗑️ - Erro no cleanup: {e}")
                 del source
                 del ffmpeg_source
                 gc.collect()
@@ -542,7 +525,7 @@ class MusicBot(commands.Cog):
                     else:
                         song = self.get_random_song()
                         if not song:
-                            print("❌ - Nenhuma música encontrada na pasta.")
+                            logger.error("❌ - Nenhuma música encontrada na pasta.")
                             await asyncio.sleep(60)
                             continue
                         path = os.path.join(self.music_folder, song)
@@ -565,7 +548,7 @@ class MusicBot(commands.Cog):
 
                 song = self.get_random_song()
                 if not song:
-                    print("❌ - Nenhuma música encontrada na pasta.")
+                    logger.error("❌ - Nenhuma música encontrada na pasta.")
                     await asyncio.sleep(60)
                     continue
                 path = os.path.join(self.music_folder, song)
@@ -576,10 +559,10 @@ class MusicBot(commands.Cog):
                     if jingle and await self.verify_and_cleanup_audio_file(jingle):
                         await _tocar(vc, jingle, fade=False)
         except asyncio.CancelledError:
-            print("🎵 - Task de reprodução cancelada limpamente.")
+            logger.info("🎵 - Task de reprodução cancelada limpamente.")
             raise
         except Exception as e:
-            print(f"❌ - Erro no loop principal de reprodução: {e}")
+            logger.error(f"❌ - Erro no loop principal de reprodução: {e}")
 
 
 
@@ -632,17 +615,17 @@ class MusicBot(commands.Cog):
                     await proc.wait()
                 except Exception:
                     pass
-                print(f"⚠️ - Timeout na verificação do arquivo com ffmpeg: {path}")
+                logger.warning(f"⚠️ - Timeout na verificação do arquivo com ffmpeg: {path}")
                 exit_code = -1
                 stderr_output = "Timeout"
 
             if exit_code != 0 or "Invalid data" in stderr_output or "Header missing" in stderr_output:
-                print(f"🗑️ - Arquivo corrompido ou inválido. Deletando: {path}")
-                print(f"⚠️ stderr: {stderr_output}")
+                logger.info(f"🗑️ - Arquivo corrompido ou inválido. Deletando: {path}")
+                logger.warning(f"⚠️ stderr: {stderr_output}")
                 try:
                     os.remove(path)
                 except Exception as e:
-                    print(f"⚠️ - Erro ao deletar arquivo: {e}")
+                    logger.error(f"⚠️ - Erro ao deletar arquivo: {e}")
                 
                 if path in self.songs_cache:
                     del self.songs_cache[path]
@@ -656,7 +639,7 @@ class MusicBot(commands.Cog):
             return True
 
         except Exception as e:
-            print(f"⚠️ - Erro ao verificar arquivo com ffmpeg: {e}")
+            logger.error(f"⚠️ - Erro ao verificar arquivo com ffmpeg: {e}")
             return False
 
 
@@ -684,7 +667,7 @@ class MusicBot(commands.Cog):
     async def check_music(self):
         channel = getattr(self, "temp_channel", None) or self.client.get_channel(self.voice_channel_id)
         if not channel:
-            print("❌ - [check_music] Canal de voz principal/temporário não configurado ou não encontrado.")
+            logger.error("❌ - [check_music] Canal de voz principal/temporário não configurado ou não encontrado.")
             return
 
         backoff_delay = 1  # começa com 1 segundo
@@ -710,11 +693,11 @@ class MusicBot(commands.Cog):
                     if self.play_task is None or self.play_task.done():
                         self.play_task = asyncio.create_task(self.play_music(vc))
                     
-                    print(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
+                    logger.info(f"🔄️ - Reconectado ao canal de voz: {channel.name}")
                     reconnected_successfully = True
                     break  # reconectado com sucesso, sai do loop
                 except Exception as e:
-                    print(f"❌ - Erro ao reconectar (tentativa {attempt + 1}): {e}")
+                    logger.error(f"❌ - Erro ao reconectar (tentativa {attempt + 1}): {e}")
                     if vc:
                         try:
                             await vc.disconnect()
@@ -731,9 +714,9 @@ class MusicBot(commands.Cog):
         # Se não conseguiu conectar depois de todas as tentativas, incrementa falhas consecutivas
         if not vc or not vc.is_connected() or not reconnected_successfully:
             self.consecutive_failed_connections += 1
-            print(f"⚠️ - Falha na conexão de voz detectada (Sequência de falhas: {self.consecutive_failed_connections}/3)")
+            logger.warning(f"⚠️ - Falha na conexão de voz detectada (Sequência de falhas: {self.consecutive_failed_connections}/3)")
             if self.consecutive_failed_connections >= 3:
-                print("🚨 - Múltiplas falhas de conexão. Reiniciando bot por garantia...")
+                logger.critical("🚨 - Múltiplas falhas de conexão. Reiniciando bot por garantia...")
                 await restart(self.client.user.name)
                 return
         else:
@@ -748,14 +731,14 @@ class MusicBot(commands.Cog):
         if vc and vc.is_connected():
             if not vc.is_playing() and not vc.is_paused():
                 self.consecutive_idle_ticks += 1
-                print(f"⏳ - Bot conectado mas ocioso/sem tocar nada (Sequência de ociosidade: {self.consecutive_idle_ticks}/3)")
+                logger.warning(f"⏳ - Bot conectado mas ocioso/sem tocar nada (Sequência de ociosidade: {self.consecutive_idle_ticks}/3)")
 
                 if self.play_task is None or self.play_task.done():
-                    print("🔄️ - Música parou. Reiniciando stream...")
+                    logger.info("🔄️ - Música parou. Reiniciando stream...")
                     try:
                         self.play_task = asyncio.create_task(self.play_music(vc))
                     except Exception as e:
-                        print(f"❌ - Erro ao reiniciar o stream: {e}")
+                        logger.error(f"❌ - Erro ao reiniciar o stream: {e}")
                         try:
                             await vc.disconnect()
                         except Exception:
@@ -764,7 +747,7 @@ class MusicBot(commands.Cog):
                         return
 
                 if self.consecutive_idle_ticks >= 3:
-                    print("🚨 - Bot está conectado mas travado sem tocar áudio. Reiniciando bot...")
+                    logger.critical("🚨 - Bot está conectado mas travado sem tocar áudio. Reiniciando bot...")
                     try:
                         await vc.disconnect()
                     except Exception:
@@ -800,7 +783,7 @@ class MusicBot(commands.Cog):
         now = datetime.datetime.now().astimezone(pytz.timezone('America/Sao_Paulo'))
         next_hour = (now + datetime.timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
         seconds_until_next_hour = (next_hour - now).total_seconds()
-        print(f"⏳ - Próximo anúncio em {int(seconds_until_next_hour)} segundos")
+        logger.info(f"⏳ - Próximo anúncio em {int(seconds_until_next_hour)} segundos")
         await asyncio.sleep(seconds_until_next_hour)  # Espera até a próxima hora cheia
         # Só pega o anúncio no momento certo, sem repetir
         self.current_announcement = self.get_hourly_announcement()
@@ -844,7 +827,7 @@ class MusicBot(commands.Cog):
         end_timestamp = int(datetime.datetime.now().timestamp()) + int(duration)            # agora + duração da música
 
 
-        print(f"💿 - Tocando Agora: {song} ({tempo_total})")
+        logger.info(f"💿 - Tocando Agora: {song} ({tempo_total})")
         await self.client.change_presence(activity=discord.CustomActivity(name=f"Ouvindo {song}"))
         embed = discord.Embed( description=f"## 🎶 • Tocando agora\n\nkyu~ sente essa vibe comigo 💛\n\n**{song}**\n\n⏱️ Duração total: `{tempo_total}`\n⏳ Termina: <t:{end_timestamp}:R>\n\nRelaxa… a Yoko tá no controle 😌🔥" , color=0xFBC02D)  # amarelo estilo Braixen
         embed.set_footer(text=f"{self.client.user.name} • {self.channel.guild.name} • {now.hour:02d}:{now.minute:02d}")
@@ -883,7 +866,7 @@ class MusicBot(commands.Cog):
             else:
                 self.status_msg = await vc.channel.send(embed=embed , view= view)
         except Exception as e:
-            print(f"❌ - Erro ao atualizar mensagem de status: {e}")
+            logger.error(f"❌ - Erro ao atualizar mensagem de status: {e}")
 
 
 
@@ -1208,7 +1191,7 @@ class MusicBot(commands.Cog):
 
         except Exception as e:
             await interaction.followup.send( f"🎧 Kyu… deu um errinho aqui 😿 Não consegui me mover para o canal {canal.mention}. Tenta de novo em alguns instantes, tá?" )
-            print(f"🚨 Falha ao mover o bot para o canal de voz: {e}")
+            logger.error(f"🚨 Falha ao mover o bot para o canal de voz: {e}")
 
 
 

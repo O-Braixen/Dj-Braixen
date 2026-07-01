@@ -38,8 +38,8 @@ async def botstatus(self, interaction: discord.Interaction):
     now = datetime.datetime.now().astimezone(fuso)
 
     try:
-        res_information, host = await informação(self.client.user.name)
-        res_status, host = await status(self.client.user.name)
+        res_information, host = await informação()
+        res_status, host = await status()
         ambiente = "Produção"
         # ==========================================
         # SQUARECLOUD
@@ -196,7 +196,7 @@ class owner(commands.Cog):
   async def memory_check(self):
     try:
       if self.limit_ram is False:
-        res_information , host = await informação(self.client.user.name)
+        res_information , host = await informação()
         if host == "squarecloud":
           total_ram = int(res_information['response']['ram'])
           self.limit_ram = total_ram - int(total_ram * 0.05)
@@ -205,7 +205,7 @@ class owner(commands.Cog):
           total_ram = int(res_information['apps']['ram'])
           self.limit_ram = total_ram - int(total_ram * 0.05)
         logger.info(f"🤖 - LIMITE DE RAM DEFINIDO PARA: {self.limit_ram} ")
-      res_status, host = await status(self.client.user.name)
+      res_status, host = await status()
 
       if host == "squarecloud":
         ram_str = res_status['response']['ram']
@@ -217,7 +217,7 @@ class owner(commands.Cog):
 
       if ram_value >= self.limit_ram:
           logger.warning(f"🤖 - Uso de RAM alto!\nTotal de Ram usado:{ram_value} / {self.limit_ram}\nReiniciando o app pela {host}...")
-          await restart(self.client.user.name)
+          await restart()
 
     except Exception as e:
         self._falhas_memoria += 1
@@ -225,7 +225,7 @@ class owner(commands.Cog):
         if self._falhas_memoria >= 50:
             logger.critical("🚨 - Muitas falhas consecutivas ao checar memória. Reiniciando preventivamente...")
             await asyncio.sleep(10)
-            await restart(self.client.user.name)
+            await restart()
 
 
 
@@ -309,7 +309,7 @@ class owner(commands.Cog):
     if interaction.user.id == DONOID:
       await interaction.response.defer()
       await interaction.followup.send(f"Solicitando seu pedido...")
-      retorno, host = await restart(self.client.user.name)
+      retorno, host = await restart()
       await interaction.followup.send(f"Retorno da sua solicitação: {retorno['status']} em {host}")
 
     await interaction.response.send_message("Este comando é somente para o Dono do bot usar ~kyuu.")

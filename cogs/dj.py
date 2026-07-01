@@ -2,7 +2,7 @@ import discord, random, asyncio, os, datetime , pytz , aiohttp , gc , subprocess
 from discord.ext import commands , tasks
 from pathlib import Path
 from discord import app_commands
-from cogs.essential.host import status,restart , informação
+from cogs.essential.host import restart
 from dotenv import load_dotenv
 from functools import partial
 
@@ -125,23 +125,34 @@ class MusicBot(commands.Cog):
     def atualizar_cache_musicas(self):
         try:
             if os.path.exists(self.music_folder):
-                self.available_songs = [f for f in os.listdir(self.music_folder) if f.endswith(".mp3")]
+                songs = []
+                for root, _, files in os.walk(self.music_folder):
+                    for f in files:
+                        if f.endswith(".mp3"):
+                            rel_path = os.path.relpath(os.path.join(root, f), self.music_folder)
+                            songs.append(rel_path.replace("\\", "/"))
+                self.available_songs = songs
             else:
                 self.available_songs = []
 
             if os.path.exists(self.announcement_folder):
-                self.available_jingles = [
-                    os.path.join(self.announcement_folder, f) for f in os.listdir(self.announcement_folder)
-                    if f.endswith(".mp3") and f.startswith("jingle")
-                ]
-                self.available_intros = [
-                    os.path.join(self.announcement_folder, f) for f in os.listdir(self.announcement_folder)
-                    if f.endswith(".mp3") and f.startswith("pedidos")
-                ]
-                self.available_announcements = [
-                    os.path.join(self.announcement_folder, f) for f in os.listdir(self.announcement_folder)
-                    if f.endswith(".mp3") and f[:-4].replace("H", "").isdigit()
-                ]
+                jingles = []
+                intros = []
+                announcements = []
+                for root, _, files in os.walk(self.announcement_folder):
+                    for f in files:
+                        if f.endswith(".mp3"):
+                            full_path = os.path.join(root, f)
+                            basename = os.path.basename(f)
+                            if basename.startswith("jingle"):
+                                jingles.append(full_path)
+                            elif basename.startswith("pedidos"):
+                                intros.append(full_path)
+                            elif basename[:-4].replace("H", "").isdigit():
+                                announcements.append(full_path)
+                self.available_jingles = jingles
+                self.available_intros = intros
+                self.available_announcements = announcements
             else:
                 self.available_jingles = []
                 self.available_intros = []
@@ -219,61 +230,99 @@ class MusicBot(commands.Cog):
             logger.error("❌ - SEM DADOS DE REPOSITORIO, VERIFIQUE O .ENV")
             return
         
+        async def obter_arquivos_repositorio_recursivo(session, path_atual):
+            url = f"{GITHUB_API_URL_BASE}/{path_atual}"
+            async with session.get(url, headers=HEADERS) as response:
+                if response.status != 200:
+                    logger.error(f"❌ - Erro ao acessar {url}: {response.status}")
+                    return []
+                conteudo = await response.json()
+                arquivos = []
+                for item in conteudo:
+                    if item["type"] == "file":
+                        arquivos.append(item)
+                    elif item["type"] == "dir":
+                        await asyncio.sleep(0.5)  # Pequeno delay para evitar rate limits
+                        sub_arquivos = await obter_arquivos_repositorio_recursivo(session, item["path"])
+                        arquivos.extend(sub_arquivos)
+                return arquivos
+
         # Semáforo para limitar downloads simultâneos e não sobrecarregar a RAM/Rede
-        semaforo = asyncio.Semaphore(5)
-        async def baixar_arquivo(session, item, pasta_local):
-            nome_arquivo = item["name"]
-            caminho_arquivo = os.path.join(pasta_local, nome_arquivo)
+        semaforo = asyncio.Semaphore(2)
+        async def baixar_arquivo(session, item):
+            path_relativo = item["path"]
+            caminho_arquivo = os.path.join("musicas_repo", path_relativo)
             if os.path.exists(caminho_arquivo):
                 return
+            os.makedirs(os.path.dirname(caminho_arquivo), exist_ok=True)
             async with semaforo:
                 try:
                     async with session.get(item["download_url"]) as download_response:
                         if download_response.status == 200:
-                            # Faz o download normal (lendo todo o conteúdo)
-                            conteudo_arquivo = await download_response.read()
+                            # Stream download in chunks to minimize RAM usage
                             with open(caminho_arquivo, "wb") as f:
-                                f.write(conteudo_arquivo)
-                            logger.info(f"✅ - Baixado: {nome_arquivo}")
-                            await asyncio.sleep(0.2)  # Pequeno delay para evitar taxa limite
+                                async for chunk in download_response.content.iter_chunked(65536):
+                                    f.write(chunk)
+                            logger.info(f"✅ - Baixado: {path_relativo}")
+                            await asyncio.sleep(0.5)  # Pequeno delay para evitar taxa limite
                         else:
-                            logger.error(f"❌ - Erro ao baixar {nome_arquivo}: Status {download_response.status}")
+                            logger.error(f"❌ - Erro ao baixar {path_relativo}: Status {download_response.status}")
                 except Exception as e:
-                    logger.error(f"❌ - Exceção ao baixar {nome_arquivo}: {e}")
+                    logger.error(f"❌ - Exceção ao baixar {path_relativo}: {e}")
+
         async with aiohttp.ClientSession() as session:
+            remote_files = []
+            for pasta_remota in PASTAS:
+                logger.info(f"🌐 - Mapeando arquivos da pasta remota: {pasta_remota}")
+                arquivos_pasta = await obter_arquivos_repositorio_recursivo(session, pasta_remota)
+                remote_files.extend(arquivos_pasta)
+
+            # Mapear caminhos relativos do repo remoto
+            arquivos_repo = {item["path"].replace("\\", "/"): item for item in remote_files}
+
+            # Listar arquivos locais
+            arquivos_locais = set()
             for pasta_remota in PASTAS:
                 pasta_local = os.path.join("musicas_repo", pasta_remota)
-                os.makedirs(pasta_local, exist_ok=True)
-                url = f"{GITHUB_API_URL_BASE}/{pasta_remota}"
-                async with session.get(url, headers=HEADERS) as response:
-                    if response.status != 200:
-                        logger.error(f"❌ - Erro ao acessar {url}: {response.status}")
-                        logger.info("🔁 - Tentando novamente...")
-                        return await self.baixar_arquivos(tentativa + 1)
-                    conteudo = await response.json()
-                    # Arquivos existentes no GitHub
-                    arquivos_repo = {
-                        item["name"]
-                        for item in conteudo
-                        if item["type"] == "file"
-                    }
-                    # Arquivos existentes localmente
-                    arquivos_locais = set(os.listdir(pasta_local))
-                    # 🧹 REMOVE arquivos locais que não existem mais no repo
-                    for arquivo in arquivos_locais - arquivos_repo:
-                        caminho = os.path.join(pasta_local, arquivo)
-                        if os.path.isfile(caminho):
-                            os.remove(caminho)
-                            logger.info(f"🗑️ - Removido (não existe no repo): {arquivo}")
-                    # ⬇️ BAIXA arquivos novos
-                    tarefas = []
-                    for item in conteudo:
-                        if item["type"] == "file":
-                            tarefas.append(baixar_arquivo(session, item, pasta_local))
-                    
-                    # 🚀 EXECUTA OS DOWNLOADS EM PARALELO
-                    if tarefas:
-                        await asyncio.gather(*tarefas)
+                if os.path.exists(pasta_local):
+                    for root, _, files in os.walk(pasta_local):
+                        for f in files:
+                            full_path = os.path.join(root, f)
+                            rel_path = os.path.relpath(full_path, "musicas_repo")
+                            arquivos_locais.add(rel_path.replace("\\", "/"))
+
+            # 🧹 REMOVE arquivos locais que não existem mais no repo
+            for arquivo in arquivos_locais - set(arquivos_repo.keys()):
+                caminho = os.path.join("musicas_repo", arquivo)
+                if os.path.isfile(caminho):
+                    try:
+                        os.remove(caminho)
+                        logger.info(f"🗑️ - Removido (não existe no repo): {arquivo}")
+                    except Exception as e:
+                        logger.error(f"⚠️ - Erro ao remover {arquivo}: {e}")
+
+            # 🧹 Limpa diretórios vazios locais
+            for pasta_remota in PASTAS:
+                pasta_local = os.path.join("musicas_repo", pasta_remota)
+                if os.path.exists(pasta_local):
+                    for root, dirs, _ in os.walk(pasta_local, topdown=False):
+                        for d in dirs:
+                            dir_path = os.path.join(root, d)
+                            try:
+                                if not os.listdir(dir_path):
+                                    os.rmdir(dir_path)
+                                    logger.info(f"🗑️ - Diretório vazio removido: {dir_path}")
+                            except Exception:
+                                pass
+
+            # ⬇️ BAIXA arquivos novos
+            tarefas = []
+            for path_rel, item in arquivos_repo.items():
+                tarefas.append(baixar_arquivo(session, item))
+            
+            if tarefas:
+                await asyncio.gather(*tarefas)
+
         self.atualizar_cache_musicas()
         logger.info("✅ - Biblioteca de músicas 100% sincronizada com o GitHub")
 
@@ -717,7 +766,7 @@ class MusicBot(commands.Cog):
             logger.warning(f"⚠️ - Falha na conexão de voz detectada (Sequência de falhas: {self.consecutive_failed_connections}/3)")
             if self.consecutive_failed_connections >= 3:
                 logger.critical("🚨 - Múltiplas falhas de conexão. Reiniciando bot por garantia...")
-                await restart(self.client.user.name)
+                await restart()
                 return
         else:
             self.consecutive_failed_connections = 0
@@ -743,7 +792,7 @@ class MusicBot(commands.Cog):
                             await vc.disconnect()
                         except Exception:
                             pass
-                        await restart(self.client.user.name)
+                        await restart()
                         return
 
                 if self.consecutive_idle_ticks >= 3:
@@ -752,7 +801,7 @@ class MusicBot(commands.Cog):
                         await vc.disconnect()
                     except Exception:
                         pass
-                    await restart(self.client.user.name)
+                    await restart()
                     return
             else:
                 self.consecutive_idle_ticks = 0
@@ -1050,9 +1099,12 @@ class MusicBot(commands.Cog):
         todos_arquivos = []
         for pasta in [self.music_folder, self.announcement_folder]:
             if os.path.exists(pasta):
-                for nome_arquivo in os.listdir(pasta):
-                    if nome_arquivo.endswith(".mp3"):
-                        todos_arquivos.append((pasta, nome_arquivo))
+                for root, _, files in os.walk(pasta):
+                    for nome_arquivo in files:
+                        if nome_arquivo.endswith(".mp3"):
+                            caminho_completo = os.path.join(root, nome_arquivo)
+                            rel_path = os.path.relpath(caminho_completo, pasta)
+                            todos_arquivos.append((caminho_completo, rel_path))
 
         total = len(todos_arquivos)
         verificados = 0
@@ -1068,21 +1120,21 @@ class MusicBot(commands.Cog):
             nonlocal verificados
             while not fila.empty():
                 try:
-                    pasta, nome_arquivo = fila.get_nowait()
+                    caminho_completo, rel_path = fila.get_nowait()
                 except asyncio.QueueEmpty:
                     break
 
-                caminho = os.path.join(pasta, nome_arquivo)
                 # update_cache=False para evitar atualizar o cache milhares de vezes repetidas em disco/RAM
-                valido = await self.verify_and_cleanup_audio_file(caminho, update_cache=False)
+                valido = await self.verify_and_cleanup_audio_file(caminho_completo, update_cache=False)
 
                 async with lock:
                     verificados += 1
                     if not valido:
-                        arquivos_removidos.append(nome_arquivo)
+                        arquivos_removidos.append(rel_path)
                 fila.task_done()
+                await asyncio.sleep(0.2)  # Delay entre verificações para poupar CPU/RAM
 
-        # Task de progresso que atualiza a mensagem a cada 2 segundos
+        # Task de progresso que atualiza a mensagem a cada 5 segundos
         async def atualizar_progresso():
             while verificados < total:
                 await asyncio.sleep(5)
@@ -1094,8 +1146,8 @@ class MusicBot(commands.Cog):
 
         progresso_task = asyncio.create_task(atualizar_progresso())
 
-        # Limita a 8 workers paralelos para não estourar RAM do sistema
-        workers = [asyncio.create_task(worker()) for _ in range(8)]
+        # Limita a 2 workers paralelos para não estourar RAM do sistema
+        workers = [asyncio.create_task(worker()) for _ in range(2)]
         await asyncio.gather(*workers)
 
         progresso_task.cancel()

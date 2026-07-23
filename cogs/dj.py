@@ -1282,7 +1282,8 @@ class MusicBot(commands.Cog):
 
         # define como a próxima música
         self.pedidos.append(path)  # adiciona na fila
-        await interaction.response.send_message(f"🎶 Pedido aceito~ kyu! **{música}** já já entra no ar pra você aproveitar.", ephemeral=True , delete_after = 20)
+        nome_exibicao = os.path.basename(música)
+        await interaction.response.send_message(f"🎶 Pedido aceito~ kyu! **{nome_exibicao}** já já entra no ar pra você aproveitar.", ephemeral=True , delete_after = 20)
 
 
 
@@ -1293,7 +1294,16 @@ class MusicBot(commands.Cog):
     @tocar_slash.autocomplete('música')
     async def autocomplete_musicas(self, interaction: discord.Interaction, current: str):
         files = self.available_songs
-        return [ app_commands.Choice(name=f, value=f) for f in files if current.lower() in f.lower()][:25]  # Discord permite até 25 sugestões
+        # name é o que aparece visualmente no Discord (apenas o nome do arquivo)
+        # value é o valor relativo enviado ao comando (ex: "Albuns/Pasta/Musica.mp3")
+        choices = []
+        for f in files:
+            nome_display = os.path.basename(f)
+            if current.lower() in f.lower() or current.lower() in nome_display.lower():
+                choices.append(app_commands.Choice(name=nome_display, value=f))
+                if len(choices) == 25:
+                    break
+        return choices
 
 
 

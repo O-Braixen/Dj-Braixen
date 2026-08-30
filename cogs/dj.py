@@ -977,7 +977,7 @@ class MusicBot(commands.Cog):
             return
 
         # Monta lista completa formatada com contador
-        lista = [f"{i}. {song}" for i, song in enumerate(self.played_songs, start=1)]
+        lista = [f"{i}. {os.path.basename(song)}" for i, song in enumerate(self.played_songs, start=1)]
 
         # Envia em blocos de até ~1800 caracteres
         bloco = ""
@@ -1012,7 +1012,7 @@ class MusicBot(commands.Cog):
             return
 
         # Monta lista completa formatada com contador
-        lista = [f"{i}. {song}" for i, song in enumerate(musicas, start=1)]
+        lista = [f"{i}. {os.path.basename(song)}" for i, song in enumerate(musicas, start=1)]
 
         # Envia em blocos de até ~1800 caracteres
         bloco = ""
@@ -1274,15 +1274,35 @@ class MusicBot(commands.Cog):
         if not vc_atual or not vc_atual.channel or interaction.user.voice is None or vc_atual.channel != interaction.user.voice.channel:
             await interaction.response.send_message( "🎧 Ei, ei~ kyu! Você precisa estar no mesmo canal de voz que eu pra fazer um pedido, viu?", ephemeral=True , delete_after = 20)
             return
+
         path = os.path.join(self.music_folder, música)
+        encontrada = None
 
         if not os.path.exists(path):
-            await interaction.response.send_message( "🎧 Hmm~ kyu… procurei direitinho, mas essa música não tá no meu sistema. Que tal tentar outra pra gente curtir juntinhos?", ephemeral=True , delete_after = 20)
-            return
+            # Tenta resolver caso o valor tenha sido truncado em 100 caracteres pelo autocomplete
+            for s in self.available_songs:
+                if s == música or s[:100] == música or os.path.basename(s) == música or os.path.basename(s)[:100] == música:
+                    encontrada = s
+                    break
+
+            if not encontrada:
+                # Busca insensível a maiúsculas/minúsculas se o usuário digitou manualmente
+                for s in self.available_songs:
+                    if música.lower() in s.lower() or música.lower() in os.path.basename(s).lower():
+                        encontrada = s
+                        break
+
+            if encontrada:
+                path = os.path.join(self.music_folder, encontrada)
+            else:
+                await interaction.response.send_message( "🎧 Hmm~ kyu… procurei direitinho, mas essa música não tá no meu sistema. Que tal tentar outra pra gente curtir juntinhos?", ephemeral=True , delete_after = 20)
+                return
+        else:
+            encontrada = música
 
         # define como a próxima música
         self.pedidos.append(path)  # adiciona na fila
-        nome_exibicao = os.path.basename(música)
+        nome_exibicao = os.path.basename(encontrada)
         await interaction.response.send_message(f"🎶 Pedido aceito~ kyu! **{nome_exibicao}** já já entra no ar pra você aproveitar.", ephemeral=True , delete_after = 20)
 
 
@@ -1294,13 +1314,15 @@ class MusicBot(commands.Cog):
     @tocar_slash.autocomplete('música')
     async def autocomplete_musicas(self, interaction: discord.Interaction, current: str):
         files = self.available_songs
-        # name é o que aparece visualmente no Discord (apenas o nome do arquivo)
-        # value é o valor relativo enviado ao comando (ex: "Albuns/Pasta/Musica.mp3")
+        # name é o que aparece visualmente no Discord (apenas o nome do arquivo, máx 100 caracteres)
+        # value é o valor relativo enviado ao comando (ex: "Albuns/Pasta/Musica.mp3", máx 100 caracteres)
         choices = []
         for f in files:
             nome_display = os.path.basename(f)
             if current.lower() in f.lower() or current.lower() in nome_display.lower():
-                choices.append(app_commands.Choice(name=nome_display, value=f))
+                name_clean = nome_display[:100]
+                value_clean = f[:100]
+                choices.append(app_commands.Choice(name=name_clean, value=value_clean))
                 if len(choices) == 25:
                     break
         return choices

@@ -230,47 +230,80 @@ class MusicBot(commands.Cog):
             logger.error("❌ - SEM DADOS DE REPOSITORIO, VERIFIQUE O .ENV")
             return
         
+        headers = {"Authorization": f"token {GIT_TOKEN}"}
+
         async def obter_arquivos_repositorio_recursivo(session, path_atual):
             url = f"{GITHUB_API_URL_BASE}/{path_atual}"
-            async with session.get(url, headers=HEADERS) as response:
-                if response.status != 200:
-                    logger.error(f"❌ - Erro ao acessar {url}: {response.status}")
-                    return []
-                conteudo = await response.json()
-                arquivos = []
-                for item in conteudo:
-                    if item["type"] == "file":
-                        arquivos.append(item)
-                    elif item["type"] == "dir":
-                        await asyncio.sleep(0.5)  # Pequeno delay para evitar rate limits
-                        sub_arquivos = await obter_arquivos_repositorio_recursivo(session, item["path"])
-                        arquivos.extend(sub_arquivos)
-                return arquivos
+            for retentativa in range(3):
+                try:
+                    async with session.get(url) as response:
+                        if response.status == 200:
+                            conteudo = await response.json()
+                            arquivos = []
+                            for item in conteudo:
+                                if item["type"] == "file":
+                                    arquivos.append(item)
+                                elif item["type"] == "dir":
+                                    await asyncio.sleep(0.5)  # Pequeno delay para evitar rate limits
+                                    sub_arquivos = await obter_arquivos_repositorio_recursivo(session, item["path"])
+                                    arquivos.extend(sub_arquivos)
+                            return arquivos
+                        elif response.status in (403, 429):
+                            logger.warning(f"⚠️ - Rate limit atingido ao listar {url}. Aguardando 5s...")
+                            await asyncio.sleep(5)
+                        else:
+                            logger.error(f"❌ - Erro ao acessar {url}: Status {response.status}")
+                            await asyncio.sleep(2)
+                except Exception as e:
+                    logger.error(f"❌ - Exceção ao acessar {url}: {e}")
+                    await asyncio.sleep(2)
+            return []
 
-        # Semáforo para limitar downloads simultâneos e não sobrecarregar a RAM/Rede
-        semaforo = asyncio.Semaphore(2)
+        # Semáforo para controlar downloads e evitar bloqueios da API/Rede
+        semaforo = asyncio.Semaphore(1)
         async def baixar_arquivo(session, item):
             path_relativo = item["path"]
             caminho_arquivo = os.path.join("musicas_repo", path_relativo)
             if os.path.exists(caminho_arquivo):
                 return
             os.makedirs(os.path.dirname(caminho_arquivo), exist_ok=True)
-            async with semaforo:
-                try:
-                    async with session.get(item["download_url"]) as download_response:
-                        if download_response.status == 200:
-                            # Stream download in chunks to minimize RAM usage
-                            with open(caminho_arquivo, "wb") as f:
-                                async for chunk in download_response.content.iter_chunked(65536):
-                                    f.write(chunk)
-                            logger.info(f"✅ - Baixado: {path_relativo}")
-                            await asyncio.sleep(0.5)  # Pequeno delay para evitar taxa limite
-                        else:
-                            logger.error(f"❌ - Erro ao baixar {path_relativo}: Status {download_response.status}")
-                except Exception as e:
-                    logger.error(f"❌ - Exceção ao baixar {path_relativo}: {e}")
 
-        async with aiohttp.ClientSession() as session:
+            async with semaforo:
+                download_url = item.get("download_url")
+                if not download_url:
+                    return
+
+                max_retries = 3
+                for attempt in range(1, max_retries + 1):
+                    try:
+                        # headers já inclusos na session
+                        async with session.get(download_url) as download_response:
+                            if download_response.status == 200:
+                                with open(caminho_arquivo, "wb") as f:
+                                    async for chunk in download_response.content.iter_chunked(65536):
+                                        f.write(chunk)
+                                logger.info(f"✅ - Baixado: {path_relativo}")
+                                await asyncio.sleep(1.0)  # Delay seguro entre downloads
+                                return
+                            elif download_response.status in (403, 429):
+                                logger.warning(f"⚠️ - Rate limit ao baixar {path_relativo} (Status {download_response.status}). Tentativa {attempt}/{max_retries}. Aguardando 5s...")
+                                await asyncio.sleep(5)
+                            else:
+                                logger.warning(f"⚠️ - Erro ao baixar {path_relativo}: Status {download_response.status}. Tentativa {attempt}/{max_retries}...")
+                                await asyncio.sleep(2 * attempt)
+                    except Exception as e:
+                        logger.warning(f"⚠️ - Exceção ao baixar {path_relativo}: {e}. Tentativa {attempt}/{max_retries}...")
+                        await asyncio.sleep(2 * attempt)
+                
+                # Se falhar todas as tentativas, garante que não deixa arquivo incompleto no disco
+                if os.path.exists(caminho_arquivo):
+                    try:
+                        os.remove(caminho_arquivo)
+                    except Exception:
+                        pass
+                logger.error(f"❌ - Falha definitiva ao baixar {path_relativo} após {max_retries} tentativas.")
+
+        async with aiohttp.ClientSession(headers=headers) as session:
             remote_files = []
             for pasta_remota in PASTAS:
                 logger.info(f"🌐 - Mapeando arquivos da pasta remota: {pasta_remota}")
@@ -315,13 +348,12 @@ class MusicBot(commands.Cog):
                             except Exception:
                                 pass
 
-            # ⬇️ BAIXA arquivos novos
-            tarefas = []
-            for path_rel, item in arquivos_repo.items():
-                tarefas.append(baixar_arquivo(session, item))
-            
-            if tarefas:
-                await asyncio.gather(*tarefas)
+            # ⬇️ BAIXA arquivos novos sequencialmente com controle de rate limit
+            arquivos_para_baixar = [item for path_rel, item in arquivos_repo.items() if not os.path.exists(os.path.join("musicas_repo", item["path"]))]
+            if arquivos_para_baixar:
+                logger.info(f"📥 - {len(arquivos_para_baixar)} arquivos novos para baixar...")
+                for item in arquivos_para_baixar:
+                    await baixar_arquivo(session, item)
 
         self.atualizar_cache_musicas()
         logger.info("✅ - Biblioteca de músicas 100% sincronizada com o GitHub")
